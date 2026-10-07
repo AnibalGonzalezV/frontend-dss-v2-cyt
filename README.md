@@ -1,48 +1,46 @@
-# DSS Frontend (Gantt Interactivo)
+# DSS Frontend - Gantt Interactivo
 
-Este repositorio contiene la Interfaz de Usuario (UI) del **Sistema de Soporte de Decisiones (DSS)** para la Bodega Lontué. Está construido con Next.js (React) y proporciona una visualización en tiempo real (Carta Gantt) y controles avanzados para la planificación de camiones de uva.
+Este repositorio contiene la Interfaz de Usuario (UI) del Sistema de Soporte de Decisiones (DSS) para la Bodega Lontué. Está desarrollado con Next.js y proporciona una visualización en tiempo real mediante una Carta Gantt dinámica, junto con controles para la planificación operativa de la recepción de uva.
 
-## 🚀 Arquitectura Tecnológica
-*   **Framework Core:** Next.js 15 (React 19).
-*   **Lenguaje:** TypeScript estricto.
+## Arquitectura y Tecnologías
+*   **Framework:** Next.js 15 (React 19).
+*   **Lenguaje:** TypeScript.
 *   **Estilos:** Tailwind CSS.
-*   **Comunicación:** Fetch API nativo consumiendo el backend de Django vía REST.
+*   **Integración:** API Fetch para el consumo de servicios REST desde el backend.
 
-## 📂 Estructura de Directorios Clave
-*   `src/api/`:
-    *   `ganttService.ts`: **[Core]** Capa de servicios que se comunica con la API. Implementa el patrón *Long Polling* para monitorear las tareas asíncronas de Celery (IA Matemática) y no congelar la UI durante la optimización.
-*   `src/features/`:
-    *   `Dashboard.tsx`: Contenedor principal. Mantiene el estado global, maneja el *Game Loop* (Auto-Play) en tiempo real acelerado, y calcula KPIs (Tiempo de espera, Camiones procesados, etc.).
-    *   `TableroGantt.tsx`: **[Core UI]** Dibuja la Carta Gantt dinámica. 
-        *   **Funcionalidades:** Cálculo de coordenadas basado en tiempo, línea roja de "tiempo actual" progresiva.
-        *   **Human-in-the-Loop:** Implementa el control interactivo de clics sobre los camiones para desplegar el modal de *Override Manual* (Fijación de asignaciones 🔒).
-    *   `ColaPatio.tsx`: Panel lateral con lista de camiones esperando físicamente en la romana o viajando por GPS (ETA).
-*   `src/types/`: Interfaces de TypeScript compartidas (`BloqueGantt`, `Pozo`, `Kpis`).
-*   `src/utils/`: Funciones puras (Ej: `colors.ts` que asigna paletas de colores estáticas y consistentes para los 11 Grupos de Mezcla).
+## Estructura del Proyecto
+*   `src/api/`: Capa de integración con el backend. Implementa Long Polling para el monitoreo de tareas asíncronas sin interrumpir la visualización.
+*   `src/features/`: Componentes principales de la aplicación.
+    *   `Dashboard.tsx`: Manejo del estado global, métricas clave (KPIs) y control del avance temporal (Auto-Play).
+    *   `TableroGantt.tsx`: Visualización de la planificación y manejo de eventos de usuario (ej. fijación manual de asignaciones).
+    *   `ColaPatio.tsx`: Panel informativo con la lista de espera de camiones.
+*   `src/types/`: Definición de interfaces TypeScript.
+*   `src/utils/`: Funciones utilitarias y configuración visual.
 
-## ⚙️ Características Principales
-1.  **Auto-Play (Game Loop):** Funcionalidad estilo simulador (Serious Games) que permite avanzar el reloj virtual automáticamente para ver la respuesta del optimizador matemático a lo largo de un día virtual.
-2.  **Overrides Manuales (DSS Verdadero):** Permite al Jefe de Patio hacer clic en un camión, elegir un pozo, modificar la hora y **Bloquear/Fijar (Pin)** esa decisión. El front le avisa a Celery para que re-optimice en cascada el resto de los camiones alrededor de esta decisión humana, sin romper la regla matemática (evitando overlaps).
-3.  **Seguridad de Zona Horaria (Naive Dates):** Todos los inputs de fecha (como el `datetime-local` del Modal) están filtrados para enviar al backend la fecha/hora absoluta tal como la digita el usuario, evitando desplazamientos accidentales por diferencia horaria del navegador vs el servidor.
+## Funcionalidades Principales
+1.  **Avance Temporal Automático (Auto-Play):** Permite simular el progreso temporal y visualizar cómo el optimizador ajusta la planificación de manera automática a lo largo de un turno.
+2.  **Asignaciones Manuales (Overrides):** Permite a los usuarios seleccionar un camión y fijar su asignación (pozo y horario). Esta acción notifica al backend para recalcular el resto de la planificación alrededor de esta restricción, sin superposiciones.
+3.  **Manejo de Zonas Horarias:** Normalización de fechas y horas desde la interfaz para asegurar compatibilidad estricta con el procesador en backend, sin desvíos locales.
 
-## 💻 Guía de Instalación (Local)
+## Guía de Instalación y Despliegue Local
 
 ### Requisitos Previos
-*   Node.js 18+ y npm
-*   El backend (`dss_v2_backend`) corriendo en `http://localhost:8080`.
+*   Node.js 18+ y npm.
+*   El backend (`dss_v2_backend`) debe estar en ejecución, configurado en `http://localhost:8080`.
 
 ### Levantar el Entorno de Desarrollo
-1. Instalar las dependencias de Node:
-   ```bash
-   npm install
-   ```
-2. Iniciar el servidor de desarrollo de Next.js:
-   ```bash
-   npm run dev
-   ```
-3. Abrir la aplicación en el navegador:
-   ```text
-   http://localhost:3000
-   ```
+1. Instalar las dependencias del proyecto:
+```bash
+npm install
+```
+2. Iniciar el servidor de desarrollo:
+```bash
+npm run dev
+```
+3. Acceder a la aplicación a través de un navegador web:
+```text
+http://localhost:3000
+```
 
-*Nota para despliegue industrial:* Para producción, utilizar `npm run build` y correrlo con un servidor PM2 o dentro de un contenedor Docker configurado para `next start`.
+### Notas para Despliegue en Producción
+Para entornos productivos, se debe compilar el proyecto mediante el comando `npm run build` y posteriormente levantarlo utilizando `npm run start`, un gestor de procesos como PM2, o incluyéndolo en un contenedor de Docker.
