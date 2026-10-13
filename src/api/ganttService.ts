@@ -14,7 +14,7 @@ export const fetchGanttData = async (): Promise<GanttDataResponse> => {
   return response.json();
 };
 
-// Función helper para el Polling de Celery
+// Funcin helper para el Polling de Celery
 const waitForCeleryTask = (taskId: string): Promise<{status: string}> => {
   return new Promise((resolve, reject) => {
     const checkStatus = async () => {
@@ -23,11 +23,11 @@ const waitForCeleryTask = (taskId: string): Promise<{status: string}> => {
         const statusData = await res.json();
         
         if (statusData.status === 'SUCCESS') {
-          resolve({ status: 'Optimización completada' });
+          resolve({ status: 'Optimizacin completada' });
         } else if (statusData.status === 'FAILURE') {
-          reject(new Error('La optimización falló en el worker'));
+          reject(new Error('La optimizacin fall en el worker'));
         } else {
-          // Aún procesando
+          // Aǧn procesando
           setTimeout(checkStatus, 500);
         }
       } catch (e) {
@@ -57,13 +57,13 @@ export const initSimulacion = async (): Promise<{status: string}> => {
   });
   
   if (!response.ok) {
-    throw new Error('Error al inicializar la simulación');
+    throw new Error('Error al inicializar la simulacin');
   }
   
   return response.json();
 };
 
-export const fijarAsignacion = async (asignacionId: number, pozoId: number, horaInicio: string, fijado: boolean): Promise<{status: string}> => {
+export const fijarAsignacion = async (asignacionId: number, pozoId: number, horaInicio: string, fijado: boolean, forzarDesviacion: boolean = false): Promise<{status: string}> => {
   const response = await fetch(`${API_BASE_URL}/asignacion/fijar/`, {
     method: 'POST',
     headers: {
@@ -73,13 +73,14 @@ export const fijarAsignacion = async (asignacionId: number, pozoId: number, hora
       asignacion_id: asignacionId,
       pozo_id: pozoId,
       hora_inicio: horaInicio,
-      fijado: fijado
+      fijado: fijado,
+      forzar_desviacion: forzarDesviacion
     })
   });
   
   if (!response.ok) {
     const errorData = await response.json();
-    throw new Error(errorData.error || 'Error al fijar la asignación');
+    throw new Error(errorData.error || 'Error al fijar la asignacin');
   }
   
   const data = await response.json();

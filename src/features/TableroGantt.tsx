@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useEffect, useState } from 'react';
 import { Pozo, BloqueGantt } from '@/types';
 import { getGroupColor } from '@/utils/colors';
 import { fijarAsignacion } from '@/api/ganttService';
+import toast from 'react-hot-toast';
 
 interface TableroGanttProps {
   pozos: Pozo[];
@@ -146,7 +147,15 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
               ))}
             </div>
 
-            {redLineLeft >= 0 && redLineLeft <= 100 && (
+            {/* Sombreado del pasado (Muralla del Tiempo) */}
+              {redLineLeft > 0 && (
+                <div 
+                  className="absolute top-0 bottom-0 bg-slate-300/30 backdrop-grayscale-[0.5] z-0 pointer-events-none transition-all duration-500 ease-in-out"
+                  style={{ left: '0%', width: `${Math.min(redLineLeft, 100)}%` }}
+                />
+              )}
+              
+              {redLineLeft >= 0 && redLineLeft <= 100 && (
               <div 
                 className="absolute top-0 bottom-0 border-l-2 border-red-500 border-dashed z-[58] transition-all duration-500 ease-in-out pointer-events-none" 
                 style={{ left: `${redLineLeft}%` }}
@@ -168,10 +177,17 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
                    const endT = new Date(asig.hora_fin).getTime();
                    const isPast = virtualTime && endT <= virtualTime;
                    let visualStateClass = isPast ? 'opacity-40 grayscale hover:grayscale-0 hover:opacity-100' : 'opacity-100 hover:-translate-y-1 hover:shadow-xl';
-
-                   if (asig.estado === 'TRANSITO') {
-                       visualStateClass += ' border-2 border-dashed border-white/60 opacity-80 backdrop-blur-sm';
-                   }
+                     
+                     const isTransito = asig.estado === 'TRANSITO';
+                     const isFirmAI = !asig.override_manual && (asig.estado === 'PATIO' || asig.estado === 'ROMANA');
+                     
+                     if (isTransito) {
+                         // Solo los GPS son fantasmas
+                         visualStateClass = 'opacity-85 border-2 border-dashed border-white/60 hover:opacity-100 hover:-translate-y-1 hover:shadow-xl bg-[linear-gradient(45deg,rgba(255,255,255,0.1)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.1)_50%,rgba(255,255,255,0.1)_75%,transparent_75%,transparent)] bg-[length:10px_10px]';
+                     } else if (isFirmAI) {
+                         // Camiones fisicos en el patio sin fijar manual: se ven solidos pero con opacidad completa
+                         visualStateClass = 'opacity-100 hover:-translate-y-1 hover:shadow-xl border border-white/20';
+                     }
 
                    const tooltipPos = rowIndex <= 1 ? 'top-full mt-2' : 'bottom-full mb-2';
                    const tooltipTriangle = rowIndex <= 1 ? 'bottom-full border-b-slate-900' : 'top-full border-t-slate-900';
@@ -181,19 +197,17 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
                        key={asig.id}
                        style={style}
                        onClick={() => {
-                         if (asig.estado === 'PATIO' || asig.estado === 'ROMANA') {
+                         if (asig.estado === 'PATIO' || asig.estado === 'ROMANA' || asig.estado === 'DESCARGANDO') {
                            setSelectedAsig({asig, pozo});
                          } else {
-                           alert('Solo puedes fijar manualmente camiones que estén físicamente en el Patio o Romana.');
+                           toast.error('Solo puedes modificar camiones en Patio, Romana o Descargando.');
                          }
                        }}
                        className={`absolute top-4 bottom-4 rounded-lg ${colorClass} ${visualStateClass} group flex flex-col justify-center cursor-pointer transition-all z-10 hover:z-[65] ${asig.estado !== 'TRANSITO' ? 'border border-white/20' : ''}`}
                      >
                        {/* Icono de Fijado (Candado) */}
                        {asig.override_manual && (
-                         <div className="absolute top-1 right-1 text-[10px] bg-slate-900/40 text-white rounded-full w-4 h-4 flex items-center justify-center">
-                           🔒
-                         </div>
+                         <div className="absolute top-1 right-1 text-[8px] font-bold bg-slate-900/70 text-white rounded-sm px-1 shadow-sm flex items-center justify-center">F</div>
                        )}
 
                        {/* Contenedor de texto */}
@@ -203,6 +217,19 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
                        </div>
 
                        <div className={`absolute left-1/2 -translate-x-1/2 ${tooltipPos} hidden group-hover:block w-56 bg-slate-900 text-white text-xs rounded-xl p-4 shadow-2xl z-[75] pointer-events-none`}>
+                          {/* Etiqueta de Certidumbre */}
+                          <div className="flex justify-center mb-3">
+                            {asig.estado === 'DESCARGANDO' ? (
+                                <span className="bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider">OPERACIÓN ACTIVA</span>
+                            ) : asig.estado === 'TRANSITO' ? (
+                                <span className="bg-slate-700/50 text-slate-300 border border-slate-600 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider">PLAN TENTATIVO (GPS)</span>
+                            ) : asig.override_manual ? (
+                                <span className="bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider">ASIGNACIÓN FIJA</span>
+                            ) : (
+                                <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider">PLAN FIRME (IA)</span>
+                            )}
+                          </div>
+                          
                           <div className="font-bold text-base mb-2 border-b border-slate-700 pb-2 text-center text-blue-100">{asig.patente} <span className="text-[10px] ml-2 text-slate-400 bg-slate-800 px-2 py-0.5 rounded">{asig.estado}</span></div>
                           <div className="space-y-1.5">
                             <div className="flex justify-between"><span className="text-slate-400">Grupo:</span> <span className="font-bold">{asig.grupo}</span></div>
@@ -227,87 +254,117 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
         </div>
       </div>
 
-      {/* Modal de Fijación Manual */}
-      {selectedAsig && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 w-[400px] border border-slate-200">
-            <h3 className="text-xl font-bold text-slate-800 mb-1">
-              Fijar Camión {selectedAsig.asig.patente}
-            </h3>
-            <p className="text-sm text-slate-500 mb-6">
-              Grupo: <span className="font-bold text-slate-700">{selectedAsig.asig.grupo}</span> | 
-              Estado: <span className="font-bold text-slate-700">{selectedAsig.asig.estado}</span>
-            </p>
+      {/* Modal de Fijación Manual / Corrección */}
+      {selectedAsig && (() => {
+        const isDescargando = selectedAsig.asig.estado === 'DESCARGANDO';
+        const isWarning = isDescargando;
+        
+        const adjustTime = (minutes: number) => {
+          const dt = new Date(selectedAsig.asig.hora_inicio);
+          dt.setMinutes(dt.getMinutes() + minutes);
+          const offset = dt.getTimezoneOffset() * 60000;
+          const localISOTime = (new Date(dt.getTime() - offset)).toISOString().slice(0, 16);
+          setSelectedAsig({...selectedAsig, asig: {...selectedAsig.asig, hora_inicio: localISOTime}});
+        };
 
-            <div className="space-y-4 mb-6">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Pozo Asignado</label>
-                <select 
-                  className="w-full bg-slate-50 text-slate-900 border border-slate-300 rounded-lg p-2.5 text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none"
-                  value={selectedAsig.pozo.id}
-                  onChange={(e) => setSelectedAsig({...selectedAsig, pozo: pozos.find(p => p.id === parseInt(e.target.value)) || selectedAsig.pozo})}
-                >
-                  {pozos.map(p => (
-                    <option key={p.id} value={p.id}>{p.nombre.replace('_', ' ')}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Hora de Inicio</label>
-                <input 
-                  type="datetime-local" 
-                  className="w-full bg-slate-50 text-slate-900 border border-slate-300 rounded-lg p-2.5 text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none"
-                  value={selectedAsig.asig.hora_inicio.slice(0, 16)}
-                  onChange={(e) => {
-                    // Como el backend usa USE_TZ=False (horas naive), enviamos la hora tal cual se digita en local
-                    setSelectedAsig({...selectedAsig, asig: {...selectedAsig.asig, hora_inicio: e.target.value}});
-                  }}
-                />
-              </div>
-            </div>
+        return (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center">
+            <div className={`bg-white rounded-2xl shadow-2xl p-6 w-[450px] border-t-4 ${isWarning ? 'border-t-orange-500' : 'border-t-blue-600'}`}>
+              <h3 className={`text-xl font-bold mb-1 ${isWarning ? 'text-orange-600' : 'text-slate-800'}`}>
+                {isWarning ? 'Corrección de Pozo (En Descarga)' : 'Asignación Manual'}
+              </h3>
+              <p className="text-sm text-slate-500 mb-5">
+                Camión <span className="font-bold text-slate-800">{selectedAsig.asig.patente}</span> | 
+                Grupo <span className="font-bold text-slate-700">{selectedAsig.asig.grupo}</span>
+                {isWarning && <span className="block mt-1 text-orange-600 font-medium">Este camión está actualmente descargando.</span>}
+              </p>
 
-            <div className="flex gap-3">
-              <button 
-                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl transition-colors"
-                onClick={() => setSelectedAsig(null)}
-              >
-                Cancelar
-              </button>
-              {selectedAsig.asig.override_manual && (
+              <div className="space-y-5 mb-6">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Seleccionar Pozo {isWarning && '(Ubicación Física Real)'}</label>
+                  <div className="flex gap-2">
+                    {pozos.map(p => (
+                      <button
+                        key={p.id}
+                        onClick={() => setSelectedAsig({...selectedAsig, pozo: p})}
+                        className={`flex-1 py-2.5 rounded-lg text-sm font-bold border transition-colors ${
+                          selectedAsig.pozo.id === p.id 
+                            ? (isWarning ? 'bg-orange-100 border-orange-500 text-orange-700' : 'bg-blue-100 border-blue-600 text-blue-700')
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        {p.nombre.replace('_', ' ')}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                
+                {!isWarning && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Hora de Inicio</label>
+                    <div className="flex gap-2">
+                      <button onClick={() => adjustTime(-10)} className="px-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-lg border border-slate-200">-10m</button>
+                      <input 
+                        type="datetime-local" 
+                        className="flex-1 bg-slate-50 text-slate-900 border border-slate-300 rounded-lg p-2 text-sm font-bold text-center outline-none focus:ring-2 focus:ring-blue-500"
+                        value={selectedAsig.asig.hora_inicio.slice(0, 16)}
+                        onChange={(e) => setSelectedAsig({...selectedAsig, asig: {...selectedAsig.asig, hora_inicio: e.target.value}})}
+                      />
+                      <button onClick={() => adjustTime(10)} className="px-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-lg border border-slate-200">+10m</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3 mt-8">
                 <button 
-                  className="flex-1 bg-orange-100 hover:bg-orange-200 text-orange-700 font-bold py-2.5 rounded-xl transition-colors"
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl transition-colors"
+                  onClick={() => setSelectedAsig(null)}
+                >
+                  Cancelar
+                </button>
+                
+                {!isWarning && selectedAsig.asig.override_manual && (
+                  <button 
+                    className="flex-1 bg-orange-100 hover:bg-orange-200 text-orange-700 font-bold py-3 rounded-xl transition-colors"
+                    disabled={loadingPin}
+                    onClick={async () => {
+                      try {
+                        setLoadingPin(true);
+                        await fijarAsignacion(selectedAsig.asig.id, selectedAsig.pozo.id, selectedAsig.asig.hora_inicio, false);
+                        setSelectedAsig(null);
+                        toast.success('Asignación liberada'); if (onUpdate) onUpdate();
+                      } catch (e: any) { toast.error(e.message); } finally { setLoadingPin(false); }
+                    }}
+                  >
+                    {loadingPin ? '...' : 'Desfijar (Auto)'}
+                  </button>
+                )}
+                
+                <button 
+                  className={`flex-1 font-bold py-3 rounded-xl transition-colors shadow-md text-white ${
+                    isWarning 
+                      ? 'bg-orange-500 hover:bg-orange-600 shadow-orange-500/30' 
+                      : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/30'
+                  }`}
                   disabled={loadingPin}
                   onClick={async () => {
                     try {
                       setLoadingPin(true);
-                      await fijarAsignacion(selectedAsig.asig.id, selectedAsig.pozo.id, selectedAsig.asig.hora_inicio, false);
+                      await fijarAsignacion(selectedAsig.asig.id, selectedAsig.pozo.id, selectedAsig.asig.hora_inicio, true, isWarning);
                       setSelectedAsig(null);
+                      toast.success(isWarning ? 'Desviación registrada y re-optimizando' : 'Asignación fijada'); 
                       if (onUpdate) onUpdate();
-                    } catch (e: any) { alert(e.message); } finally { setLoadingPin(false); }
+                    } catch (e: any) { toast.error(e.message); } finally { setLoadingPin(false); }
                   }}
                 >
-                  {loadingPin ? '...' : 'Desfijar (Auto)'}
+                  {loadingPin ? 'Guardando...' : (isWarning ? 'Forzar Corrección' : 'Fijar Plan')}
                 </button>
-              )}
-              <button 
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl transition-colors shadow-md shadow-blue-500/30"
-                disabled={loadingPin}
-                onClick={async () => {
-                  try {
-                    setLoadingPin(true);
-                    await fijarAsignacion(selectedAsig.asig.id, selectedAsig.pozo.id, selectedAsig.asig.hora_inicio, true);
-                    setSelectedAsig(null);
-                    if (onUpdate) onUpdate();
-                  } catch (e: any) { alert(e.message); } finally { setLoadingPin(false); }
-                }}
-              >
-                {loadingPin ? 'Guardando...' : '🔒 Fijar Aquí'}
-              </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };

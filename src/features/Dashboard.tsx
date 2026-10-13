@@ -5,12 +5,14 @@ import { ColaPatio } from './ColaPatio';
 import { TableroGantt } from './TableroGantt';
 import { fetchGanttData, simularSiguientePaso, initSimulacion } from '@/api/ganttService';
 import { GanttDataResponse } from '@/types';
+import toast from 'react-hot-toast';
 
 export const Dashboard = () => {
   const [data, setData] = useState<GanttDataResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [simulating, setSimulating] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [showInitModal, setShowInitModal] = useState(false);
   
   // Extraemos el reloj virtual de la base de datos
   const virtualTime = data?.reloj_virtual ? new Date(data.reloj_virtual).getTime() : null;
@@ -21,7 +23,7 @@ export const Dashboard = () => {
       setData(result);
     } catch (error) {
       console.error(error);
-      setIsPlaying(false); // Detener si hay error
+      setIsPlaying(false);
     } finally {
       setLoading(false);
     }
@@ -29,10 +31,8 @@ export const Dashboard = () => {
 
   useEffect(() => {
     loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Usamos Refs para evitar los problemas de closure en funciones recursivas
   const isPlayingRef = useRef(isPlaying);
   useEffect(() => {
     isPlayingRef.current = isPlaying;
@@ -47,6 +47,12 @@ export const Dashboard = () => {
       
       setSimulating(true);
       try {
+        if (data?.kpis && data.kpis.procesados >= data.kpis.total_dia && data.kpis.total_dia > 0) {
+          toast.success('¡Día completado! Todos los camiones procesados.');
+          setIsPlaying(false);
+          setSimulating(false);
+          return;
+        }
         await simularSiguientePaso();
         await loadData();
       } catch (e) {
@@ -54,9 +60,8 @@ export const Dashboard = () => {
         setIsPlaying(false);
       } finally {
         setSimulating(false);
-        // Si seguimos jugando, programamos el siguiente tick
         if (isPlayingRef.current) {
-          timeoutId = setTimeout(tick, 1000); // 1 segundo de respiro
+          timeoutId = setTimeout(tick, 1000);
         }
       }
     };
@@ -68,18 +73,23 @@ export const Dashboard = () => {
     return () => {
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [isPlaying]); // Solo se dispara cuando cambia isPlaying
+  }, [isPlaying, data]); // Añadido data a dependencias
 
-  const handleInitDia = async () => {
-    if(!confirm("¿Borrar todo e inicializar 85 camiones a las 09:00?")) return;
+  const handleInitDia = () => {
+    setShowInitModal(true);
+  };
+
+  const handleInitDiaConfirm = async () => {
+    setShowInitModal(false);
     setIsPlaying(false);
     setSimulating(true);
     try {
       await initSimulacion();
       await loadData();
+      toast.success("Día reiniciado exitosamente");
     } catch (e) {
       console.error(e);
-      alert("Error al inicializar");
+      toast.error("Error al inicializar");
     } finally {
       setSimulating(false);
     }
@@ -92,7 +102,7 @@ export const Dashboard = () => {
       await loadData();
     } catch (e) {
       console.error(e);
-      alert("Error en el optimizador");
+      toast.error("Error en el optimizador");
     } finally {
       setSimulating(false);
     }
@@ -102,7 +112,6 @@ export const Dashboard = () => {
     return <div className="flex h-screen items-center justify-center text-xl font-semibold">Cargando Estado del Patio...</div>;
   }
 
-  // --- LÓGICA DE SIMULACIÓN MPC (Filtros Visuales 2 horas) ---
   const pozosVisibles = data?.pozos.map(pozo => {
     return {
       ...pozo,
@@ -110,7 +119,7 @@ export const Dashboard = () => {
         if (!virtualTime) return true;
         const inicio = new Date(asig.hora_inicio).getTime();
         const fin = new Date(asig.hora_fin).getTime();
-        return inicio <= virtualTime + (2 * 3600000) && fin > virtualTime - 3600000; 
+        return inicio <= virtualTime + (4 * 3600000) && fin > virtualTime - 3600000; 
       })
     };
   }) || [];
@@ -138,7 +147,7 @@ export const Dashboard = () => {
                 : 'bg-slate-700 hover:bg-slate-600 text-white active:scale-95'
             }`}
           >
-            🔄 Reiniciar Día
+            ↻ Reiniciar Día
           </button>
           
           <button 
@@ -150,7 +159,7 @@ export const Dashboard = () => {
                 : 'bg-blue-600 hover:bg-blue-500 text-white active:scale-95'
             }`}
           >
-            ⏩ 15 min
+            ▶ 15 min
           </button>
           
           <button 
@@ -225,6 +234,37 @@ export const Dashboard = () => {
           <TableroGantt pozos={pozosVisibles} virtualTime={virtualTime} onUpdate={loadData} />
         </div>
       </div>
+
+      {/* Modal de Reinicio Personalizado */}
+      {showInitModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-[450px] border border-slate-200">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="bg-red-100 text-red-600 p-2.5 rounded-full">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+              </div>
+              <h3 className="text-xl font-bold text-slate-800">Reiniciar Simulación</h3>
+            </div>
+            <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+              Esta acción <span className="font-bold text-red-600">borrará todo el historial</span> del patio e inicializará un nuevo turno a las 09:00 a. m. con 85 camiones en ruta. ¿Estás seguro de continuar?
+            </p>
+            <div className="flex gap-3">
+              <button 
+                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl transition-colors"
+                onClick={() => setShowInitModal(false)}
+              >
+                Cancelar
+              </button>
+              <button 
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-xl transition-colors shadow-md shadow-red-500/30"
+                onClick={handleInitDiaConfirm}
+              >
+                Sí, Reiniciar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
