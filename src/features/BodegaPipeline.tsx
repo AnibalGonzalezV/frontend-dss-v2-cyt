@@ -4,17 +4,20 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { InventarioBodegaResponse, CubaInventario, PrensaInventario } from '@/types';
 import { fetchInventarioBodega } from '@/api/ganttService';
 import { getGroupColor } from '@/utils/colors';
+import { ModalDetalleMaquinaria } from './ModalDetalleMaquinaria';
 
 interface BodegaPipelineProps {
   virtualTime?: number | null;
   onSelectCuba?: (cubaNombre: string) => void;
+  onSelectViaje?: (viajeId: number) => void;
 }
 
-export const BodegaPipeline: React.FC<BodegaPipelineProps> = ({ virtualTime, onSelectCuba }) => {
+export const BodegaPipeline: React.FC<BodegaPipelineProps> = ({ virtualTime, onSelectCuba, onSelectViaje }) => {
   const [data, setData] = useState<InventarioBodegaResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filtroTexto, setFiltroTexto] = useState('');
+  const [selectedEquipoModal, setSelectedEquipoModal] = useState<string | null>(null);
 
   const cargarInventario = async () => {
     try {
@@ -219,12 +222,16 @@ export const BodegaPipeline: React.FC<BodegaPipelineProps> = ({ virtualTime, onS
             return (
               <div
                 key={pr.nombre}
-                className={`p-3 rounded-xl border transition-all flex flex-col justify-between ${
+                onClick={() => {
+                  if (onSelectCuba) onSelectCuba(pr.nombre);
+                  setSelectedEquipoModal(pr.nombre);
+                }}
+                className={`p-3 rounded-xl border transition-all flex flex-col justify-between cursor-pointer ${
                   esOperando
-                    ? 'bg-blue-50/40 border-blue-400 shadow-xs hover:border-blue-500 hover:shadow-md cursor-pointer'
+                    ? 'bg-blue-50/40 border-blue-400 shadow-xs hover:border-blue-500 hover:shadow-md'
                     : esReservada
                     ? 'bg-blue-50/20 border-dashed border-blue-300 shadow-2xs hover:border-blue-400'
-                    : 'bg-slate-50/60 border-slate-200 opacity-60'
+                    : 'bg-slate-50/60 border-slate-200 hover:border-slate-300 opacity-60 hover:opacity-100'
                 }`}
               >
                 <div className="flex items-center justify-between mb-1.5">
@@ -334,13 +341,16 @@ export const BodegaPipeline: React.FC<BodegaPipelineProps> = ({ virtualTime, onS
             return (
               <div
                 key={pf.nombre}
-                onClick={() => onSelectCuba && onSelectCuba(pf.nombre)}
-                className={`p-3 rounded-xl border transition-all flex flex-col justify-between ${
+                onClick={() => {
+                  if (onSelectCuba) onSelectCuba(pf.nombre);
+                  setSelectedEquipoModal(pf.nombre);
+                }}
+                className={`p-3 rounded-xl border transition-all flex flex-col justify-between cursor-pointer ${
                   esOperando
-                    ? 'bg-amber-50/40 border-amber-400 shadow-xs hover:border-amber-500 hover:shadow-md cursor-pointer'
+                    ? 'bg-amber-50/40 border-amber-400 shadow-xs hover:border-amber-500 hover:shadow-md'
                     : esReservada
-                    ? 'bg-amber-50/20 border-dashed border-amber-300 shadow-2xs hover:border-amber-400 cursor-pointer'
-                    : 'bg-slate-50/60 border-slate-200 opacity-60'
+                    ? 'bg-amber-50/20 border-dashed border-amber-300 shadow-2xs hover:border-amber-400'
+                    : 'bg-slate-50/60 border-slate-200 hover:border-slate-300 opacity-60 hover:opacity-100'
                 }`}
               >
                 <div className="flex items-center justify-between mb-1.5">
@@ -432,7 +442,11 @@ export const BodegaPipeline: React.FC<BodegaPipelineProps> = ({ virtualTime, onS
           {['FLT_01', 'FLT_02', 'FLT_03', 'FLT_04'].map((fltNombre, idx) => (
             <div
               key={fltNombre}
-              className="p-4 rounded-xl border border-cyan-200 bg-gradient-to-br from-cyan-50/50 to-white shadow-2xs flex flex-col justify-between"
+              onClick={() => {
+                if (onSelectCuba) onSelectCuba(fltNombre);
+                setSelectedEquipoModal(fltNombre);
+              }}
+              className="p-4 rounded-xl border border-cyan-200 bg-gradient-to-br from-cyan-50/50 to-white shadow-2xs flex flex-col justify-between cursor-pointer hover:border-cyan-400 hover:shadow-md transition-all"
             >
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
@@ -512,13 +526,16 @@ export const BodegaPipeline: React.FC<BodegaPipelineProps> = ({ virtualTime, onS
               return (
                 <div
                   key={cf.cuba}
-                  onClick={() => onSelectCuba && onSelectCuba(cf.cuba)}
+                  onClick={() => {
+                    if (onSelectCuba) onSelectCuba(cf.cuba);
+                    setSelectedEquipoModal(cf.cuba);
+                  }}
                   className={`p-3 rounded-xl border transition-all flex flex-col justify-between cursor-pointer ${
                     esOperando
                       ? 'border-emerald-400 bg-emerald-50/40 shadow-xs hover:border-emerald-500 hover:shadow-md'
                       : esReservada
                       ? 'border-dashed border-emerald-300 bg-emerald-50/20 shadow-2xs hover:border-emerald-400'
-                      : 'border-slate-200 bg-slate-50/60 opacity-60'
+                      : 'border-slate-200 bg-slate-50/60 hover:border-slate-300 opacity-60 hover:opacity-100'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1.5">
@@ -588,6 +605,14 @@ export const BodegaPipeline: React.FC<BodegaPipelineProps> = ({ virtualTime, onS
           </div>
         )}
       </div>
+
+      {/* Modal de Detalle de Maquinaria y Lotes Asociados */}
+      <ModalDetalleMaquinaria
+        nombreEquipo={selectedEquipoModal}
+        isOpen={!!selectedEquipoModal}
+        onClose={() => setSelectedEquipoModal(null)}
+        onSelectViaje={onSelectViaje}
+      />
     </div>
   );
 };

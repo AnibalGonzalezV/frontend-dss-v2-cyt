@@ -1,4 +1,4 @@
-import { GanttDataResponse, TrazabilidadViajeResponse, InventarioBodegaResponse } from '@/types';
+import { GanttDataResponse, TrazabilidadViajeResponse, InventarioBodegaResponse, DetalleMaquinariaResponse } from '@/types';
 
 const API_BASE_URL = 'http://localhost:8080/api/v1';
 
@@ -35,6 +35,18 @@ export const fetchInventarioBodega = async (): Promise<InventarioBodegaResponse>
     throw new Error('Error al obtener inventario de bodega');
   }
   
+  return response.json();
+};
+
+export const fetchDetalleMaquinaria = async (nombreEquipo: string): Promise<DetalleMaquinariaResponse> => {
+  const response = await fetch(`${API_BASE_URL}/bodega/maquinaria/${nombreEquipo}/`, {
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    throw new Error(`Error al obtener detalle de maquinaria ${nombreEquipo}`);
+  }
+
   return response.json();
 };
 

@@ -198,17 +198,23 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
                        key={asig.id}
                        style={style}
                        onClick={() => {
-                         if (asig.estado === 'PATIO' || asig.estado === 'ROMANA' || asig.estado === 'DESCARGANDO') {
-                           setSelectedAsig({asig, pozo});
-                         } else {
-                           toast.error('Solo puedes modificar camiones en Patio, Romana o Descargando.');
-                         }
+                         onSelectViaje?.(asig.viaje_id);
                        }}
                        className={`absolute top-4 bottom-4 rounded-lg ${colorClass} ${visualStateClass} group flex flex-col justify-center cursor-pointer transition-all z-10 hover:z-[65] ${asig.estado !== 'TRANSITO' ? 'border border-white/20' : ''}`}
                      >
-                       {/* Icono de Fijado (Candado) */}
-                       {asig.override_manual && (
-                         <div className="absolute top-1 right-1 text-[8px] font-bold bg-slate-900/70 text-white rounded-sm px-1 shadow-sm flex items-center justify-center">F</div>
+                       {/* Boton de Ajuste / Reasignacion Manual (Solo Patio, Romana o Descargando) */}
+                       {(asig.estado === 'PATIO' || asig.estado === 'ROMANA' || asig.estado === 'DESCARGANDO') && (
+                         <button
+                           type="button"
+                           onClick={(e) => {
+                             e.stopPropagation();
+                             setSelectedAsig({asig, pozo});
+                           }}
+                           title="Reasignar pozo / Fijar asignacion manual"
+                           className="absolute top-1 right-1 text-[9px] font-bold bg-slate-900/80 hover:bg-blue-600 text-white rounded px-1.5 py-0.5 shadow-xs flex items-center justify-center transition-colors z-20 cursor-pointer"
+                         >
+                           {asig.override_manual ? 'F' : 'Ajustar'}
+                         </button>
                        )}
 
                        {/* Contenedor de texto */}
@@ -244,6 +250,10 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
                             <span className="bg-slate-800 px-2 py-1 rounded">{new Date(asig.hora_fin).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
                           </div>
                           
+                          <div className="mt-2 text-center text-[10px] text-blue-300 font-medium">
+                            Clic para auditar trazabilidad
+                          </div>
+
                           <div className={`absolute ${tooltipTriangle} left-1/2 -translate-x-1/2 border-8 border-transparent`}></div>
                        </div>
                      </div>

@@ -129,3 +129,33 @@ export interface InventarioBodegaResponse {
   cubas_preflotacion: CubaInventario[];
   cubas_fermentacion: CubaInventario[];
 }
+
+export interface CamionMaquinaria {
+  viaje_id: number;
+  patente: string;
+  variedad: string;
+  grupo_mezcla: string;
+  estado_viaje: string;
+  es_real: boolean;
+  volumen_etapa: number;
+  unidad: string;
+  hora_flujo: string;
+  origen: string;
+  destino: string;
+}
+
+export interface DetalleMaquinariaResponse {
+  equipo: {
+    nombre: string;
+    tipo: string;
+    capacidad: number;
+    unidad: string;
+    volumen_real: number;
+    volumen_proyectado: number;
+    porcentaje_real: number;
+    porcentaje_proyectado: number;
+    estado_operativo: 'OPERANDO' | 'RESERVADA' | 'DISPONIBLE';
+    grupo_mezcla: string | null;
+  };
+  camiones: CamionMaquinaria[];
+}

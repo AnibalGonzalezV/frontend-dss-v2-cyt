@@ -297,6 +297,10 @@ export const Dashboard = () => {
         <div className="flex-1 overflow-hidden">
           <BodegaPipeline 
             virtualTime={virtualTime} 
+            onSelectViaje={(vId) => {
+              setSelectedViajeId(vId);
+              setShowTraceModal(true);
+            }}
           />
         </div>
       )}
