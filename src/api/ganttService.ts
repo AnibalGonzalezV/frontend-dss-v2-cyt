@@ -1,4 +1,4 @@
-import { GanttDataResponse } from '@/types';
+import { GanttDataResponse, TrazabilidadViajeResponse, InventarioBodegaResponse } from '@/types';
 
 const API_BASE_URL = 'http://localhost:8080/api/v1';
 
@@ -9,6 +9,30 @@ export const fetchGanttData = async (): Promise<GanttDataResponse> => {
   
   if (!response.ok) {
     throw new Error('Error al obtener datos del Gantt');
+  }
+  
+  return response.json();
+};
+
+export const fetchTrazabilidadViaje = async (viajeId: number): Promise<TrazabilidadViajeResponse> => {
+  const response = await fetch(`${API_BASE_URL}/trazabilidad/${viajeId}/`, {
+    cache: 'no-store',
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Error al obtener trazabilidad del viaje ${viajeId}`);
+  }
+  
+  return response.json();
+};
+
+export const fetchInventarioBodega = async (): Promise<InventarioBodegaResponse> => {
+  const response = await fetch(`${API_BASE_URL}/bodega/inventario/`, {
+    cache: 'no-store',
+  });
+  
+  if (!response.ok) {
+    throw new Error('Error al obtener inventario de bodega');
   }
   
   return response.json();

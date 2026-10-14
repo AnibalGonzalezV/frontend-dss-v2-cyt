@@ -8,9 +8,10 @@ interface TableroGanttProps {
   pozos: Pozo[];
   virtualTime: number | null;
   onUpdate?: () => void;
+  onSelectViaje?: (viajeId: number) => void;
 }
 
-export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, onUpdate }) => {
+export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, onUpdate, onSelectViaje }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   
   // Estado para el Modal de Fijación Manual
@@ -273,11 +274,28 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
               <h3 className={`text-xl font-bold mb-1 ${isWarning ? 'text-orange-600' : 'text-slate-800'}`}>
                 {isWarning ? 'Corrección de Pozo (En Descarga)' : 'Asignación Manual'}
               </h3>
-              <p className="text-sm text-slate-500 mb-5">
+              <p className="text-sm text-slate-500 mb-3">
                 Camión <span className="font-bold text-slate-800">{selectedAsig.asig.patente}</span> | 
                 Grupo <span className="font-bold text-slate-700">{selectedAsig.asig.grupo}</span>
                 {isWarning && <span className="block mt-1 text-orange-600 font-medium">Este camión está actualmente descargando.</span>}
               </p>
+
+              {onSelectViaje && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const vId = selectedAsig.asig.viaje_id;
+                    setSelectedAsig(null);
+                    onSelectViaje(vId);
+                  }}
+                  className="w-full mb-5 py-2 px-3 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold border border-blue-200 transition-colors flex items-center justify-center gap-1.5 shadow-2xs"
+                >
+                  <svg className="w-4 h-4 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Auditar Trazabilidad Enológica (5 Etapas)
+                </button>
+              )}
 
               <div className="space-y-5 mb-6">
                 <div>

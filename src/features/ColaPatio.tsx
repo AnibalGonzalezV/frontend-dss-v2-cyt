@@ -4,9 +4,10 @@ import { getGroupColor } from '@/utils/colors';
 
 interface ColaPatioProps {
   camiones: CamionPatio[];
+  onSelectViaje?: (viajeId: number) => void;
 }
 
-export const ColaPatio: React.FC<ColaPatioProps> = ({ camiones }) => {
+export const ColaPatio: React.FC<ColaPatioProps> = ({ camiones, onSelectViaje }) => {
   const enPatio = camiones.filter(c => c.estado === 'ROMANA' || c.estado === 'PATIO');
   const enRuta = camiones.filter(c => c.estado === 'TRANSITO' || c.estado === 'ALERTA_ATRASO');
 
@@ -24,7 +25,9 @@ export const ColaPatio: React.FC<ColaPatioProps> = ({ camiones }) => {
           return (
             <div 
               key={camion.viaje_id} 
+              onClick={() => onSelectViaje && onSelectViaje(camion.viaje_id)}
               className={`p-3 rounded-lg border-2 shadow-sm ${colorClasses} flex flex-col gap-1 transition-transform hover:scale-105 cursor-pointer relative ${camion.estado === 'TRANSITO' ? 'opacity-80 border-dashed' : ''}`}
+              title="Click para ver Auditoría de Trazabilidad Enológica (5 Etapas)"
             >
               <div className="flex justify-between items-center font-bold">
                 <span className="text-base tracking-tight">{camion.patente}</span>

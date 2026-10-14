@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ColaPatio } from './ColaPatio';
 import { TableroGantt } from './TableroGantt';
+import { BodegaPipeline } from './BodegaPipeline';
+import { ModalTrazabilidad } from './ModalTrazabilidad';
 import { fetchGanttData, simularSiguientePaso, initSimulacion } from '@/api/ganttService';
 import { GanttDataResponse } from '@/types';
 import toast from 'react-hot-toast';
@@ -13,6 +15,13 @@ export const Dashboard = () => {
   const [simulating, setSimulating] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showInitModal, setShowInitModal] = useState(false);
+  
+  // Estado de navegación por pestañas
+  const [activeTab, setActiveTab] = useState<'patio' | 'bodega'>('patio');
+  
+  // Estado para el Modal de Trazabilidad Enológica
+  const [selectedViajeId, setSelectedViajeId] = useState<number | null>(null);
+  const [showTraceModal, setShowTraceModal] = useState(false);
   
   // Extraemos el reloj virtual de la base de datos
   const virtualTime = data?.reloj_virtual ? new Date(data.reloj_virtual).getTime() : null;
@@ -127,8 +136,43 @@ export const Dashboard = () => {
   return (
     <div className="flex flex-col h-screen bg-slate-100">
       <header className="h-16 bg-slate-900 text-white flex items-center justify-between px-6 shadow-md z-10 shrink-0">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight">Bodega Lontué <span className="text-blue-400">| DSS Patio</span></h1>
+        <div className="flex items-center gap-6">
+          <div>
+            <h1 className="text-lg font-bold tracking-tight">
+              Bodega Lontué <span className="text-blue-400">| DSS Patio</span>
+            </h1>
+          </div>
+
+          {/* Navegación por Pestañas */}
+          <div className="flex bg-slate-800 p-1 rounded-xl border border-slate-700/80">
+            <button
+              onClick={() => setActiveTab('patio')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                activeTab === 'patio'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              Patio y Programación (Gantt)
+            </button>
+
+            <button
+              onClick={() => setActiveTab('bodega')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                activeTab === 'bodega'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+              Bodega y Flotación (5 Etapas)
+            </button>
+          </div>
         </div>
         <div className="flex items-center gap-4">
           {virtualTime && (
@@ -226,14 +270,46 @@ export const Dashboard = () => {
         )}
       </div>
 
-      <div className="flex flex-1 overflow-hidden p-4 gap-4">
-        <div className="w-72 flex-shrink-0 h-full z-20 rounded-xl overflow-hidden shadow-sm border border-slate-200 bg-white">
-          <ColaPatio camiones={data?.cola_patio || []} />
+      {activeTab === 'patio' ? (
+        <div className="flex flex-1 overflow-hidden p-4 gap-4">
+          <div className="w-72 flex-shrink-0 h-full z-20 rounded-xl overflow-hidden shadow-sm border border-slate-200 bg-white">
+            <ColaPatio 
+              camiones={data?.cola_patio || []} 
+              onSelectViaje={(vId) => {
+                setSelectedViajeId(vId);
+                setShowTraceModal(true);
+              }}
+            />
+          </div>
+          <div className="flex-1 h-full rounded-xl overflow-hidden shadow-sm border border-slate-200">
+            <TableroGantt 
+              pozos={pozosVisibles} 
+              virtualTime={virtualTime} 
+              onUpdate={loadData}
+              onSelectViaje={(vId) => {
+                setSelectedViajeId(vId);
+                setShowTraceModal(true);
+              }}
+            />
+          </div>
         </div>
-        <div className="flex-1 h-full rounded-xl overflow-hidden shadow-sm border border-slate-200">
-          <TableroGantt pozos={pozosVisibles} virtualTime={virtualTime} onUpdate={loadData} />
+      ) : (
+        <div className="flex-1 overflow-hidden">
+          <BodegaPipeline 
+            virtualTime={virtualTime} 
+          />
         </div>
-      </div>
+      )}
+
+      {/* Modal de Auditoría de Trazabilidad Enológica de 5 Etapas */}
+      <ModalTrazabilidad
+        viajeId={selectedViajeId}
+        isOpen={showTraceModal}
+        onClose={() => {
+          setShowTraceModal(false);
+          setSelectedViajeId(null);
+        }}
+      />
 
       {/* Modal de Reinicio Personalizado */}
       {showInitModal && (
