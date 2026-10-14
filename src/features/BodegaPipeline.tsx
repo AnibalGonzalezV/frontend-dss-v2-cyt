@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { InventarioBodegaResponse, CubaInventario } from '@/types';
+import { InventarioBodegaResponse, CubaInventario, PrensaInventario } from '@/types';
 import { fetchInventarioBodega } from '@/api/ganttService';
 import { getGroupColor } from '@/utils/colors';
 
@@ -14,7 +14,6 @@ export const BodegaPipeline: React.FC<BodegaPipelineProps> = ({ virtualTime, onS
   const [data, setData] = useState<InventarioBodegaResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [mostrarSoloActivas, setMostrarSoloActivas] = useState(true);
   const [filtroTexto, setFiltroTexto] = useState('');
 
   const cargarInventario = async () => {
@@ -34,6 +33,24 @@ export const BodegaPipeline: React.FC<BodegaPipelineProps> = ({ virtualTime, onS
   useEffect(() => {
     cargarInventario();
   }, [virtualTime]);
+
+  // Lista estática completa de 12 Prensas Neumáticas (50.000 kg c/u)
+  const todasPrensas = useMemo(() => {
+    const list: { nombre: string; capacidad: number }[] = [];
+    for (let i = 1; i <= 12; i++) {
+      const pad = i < 10 ? `0${i}` : `${i}`;
+      list.push({ nombre: `PR_${pad}`, capacidad: 50000 });
+    }
+    return list;
+  }, []);
+
+  const mapaPrensas = useMemo(() => {
+    const map = new Map<string, PrensaInventario>();
+    if (data?.prensas) {
+      data.prensas.forEach((p) => map.set(p.equipo, p));
+    }
+    return map;
+  }, [data]);
 
   // Lista estatica completa de 24 Cubas de Pre-flotacion (50k y 100k)
   const todasCubasPF = useMemo(() => {
@@ -72,6 +89,15 @@ export const BodegaPipeline: React.FC<BodegaPipelineProps> = ({ virtualTime, onS
       {/* KPI BAR SUPERIOR DE BODEGA */}
       <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs flex flex-wrap items-center justify-between gap-4 shrink-0">
         <div className="flex flex-wrap items-center gap-6">
+          <div className="flex flex-col">
+            <span className="text-[10px] uppercase font-bold text-blue-500">Prensas en Operación</span>
+            <span className="text-xl font-black text-blue-700">
+              {data?.resumen.total_prensas_ocupadas ?? 0} / 12
+            </span>
+          </div>
+
+          <div className="h-8 border-l border-slate-200 hidden sm:block"></div>
+
           <div className="flex flex-col">
             <span className="text-[10px] uppercase font-bold text-slate-400">Total Cubas Ocupadas</span>
             <span className="text-xl font-black text-slate-800">
@@ -124,6 +150,77 @@ export const BodegaPipeline: React.FC<BodegaPipelineProps> = ({ virtualTime, onS
           {error}
         </div>
       )}
+
+      {/* SECCIÓN 0: 12 PRENSAS NEUMÁTICAS */}
+      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs flex flex-col gap-3">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
+              Batería de Prensado Neumático (12 Prensas Industriales PR)
+            </h2>
+            <p className="text-xs text-slate-500 font-mono">
+              Extracción neumática de mosto turbio (50.000 kg capacidad unitaria). Descarga continua hacia pre-flotación.
+            </p>
+          </div>
+          <span className="text-xs font-mono font-bold bg-blue-50 text-blue-800 px-2.5 py-1 rounded-md border border-blue-200">
+            {data?.resumen.total_prensas_ocupadas ?? 0} / 12 En Prensado
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 pt-1">
+          {todasPrensas.map((pr) => {
+            const ocupada = mapaPrensas.get(pr.nombre);
+            const volumen = ocupada ? ocupada.volumen : 0;
+            const pct = ocupada ? ocupada.porcentaje_ocupacion : 0;
+            const grupo = ocupada ? ocupada.grupo_mezcla : null;
+            const colorClases = grupo ? getGroupColor(grupo) : 'bg-slate-300 text-slate-600';
+
+            return (
+              <div
+                key={pr.nombre}
+                className={`p-3 rounded-xl border transition-all flex flex-col justify-between ${
+                  ocupada
+                    ? 'bg-blue-50/40 border-blue-300 shadow-xs hover:border-blue-500 hover:shadow-md cursor-pointer'
+                    : 'bg-slate-50/60 border-slate-200 opacity-60'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="font-mono text-xs font-bold text-slate-800">{pr.nombre}</span>
+                  <span className="text-[10px] font-mono text-slate-500 font-semibold">
+                    {(pr.capacidad / 1000).toFixed(0)} Ton
+                  </span>
+                </div>
+
+                {ocupada ? (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${colorClases}`}>
+                        {grupo}
+                      </span>
+                      <span className="text-xs font-black text-blue-900 font-mono">{pct.toFixed(1)}%</span>
+                    </div>
+
+                    <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="bg-blue-600 h-1.5 rounded-full transition-all duration-500"
+                        style={{ width: `${Math.min(100, pct)}%` }}
+                      />
+                    </div>
+
+                    <span className="text-[10px] font-mono font-bold text-slate-600 block text-right">
+                      {volumen.toLocaleString('es-CL', { maximumFractionDigits: 0 })} kg uva
+                    </span>
+                  </div>
+                ) : (
+                  <div className="py-2 text-center">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Disponible</span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       {/* SECCIÓN 1: 24 CUBAS DE PRE-FLOTACIÓN */}
       <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs flex flex-col gap-3">

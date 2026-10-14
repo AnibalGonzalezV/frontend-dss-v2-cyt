@@ -67,6 +67,15 @@ export interface TrazabilidadViajeResponse {
   cadena_enologica: EslabonTrazabilidad[];
 }
 
+export interface PrensaInventario {
+  equipo: string;
+  grupo_mezcla: string;
+  volumen: number;
+  capacidad: number;
+  porcentaje_ocupacion: number;
+  fecha_actualizacion: string;
+}
+
 export interface CubaInventario {
   cuba: string;
   grupo_mezcla: string;
@@ -77,9 +86,12 @@ export interface CubaInventario {
 }
 
 export interface ResumenBodega {
-  total_cubas_ocupadas: number;
+  total_equipos_ocupados?: number;
+  total_prensas_ocupadas?: number;
+  total_cubas_ocupadas?: number;
   total_cubas_pf_ocupadas: number;
   total_cubas_f_ocupadas: number;
+  volumen_total_uva_prensas_kg?: number;
   volumen_total_turbio_litros: number;
   volumen_total_clarificado_litros: number;
   rendimiento_global_teorico: number;
@@ -87,6 +99,7 @@ export interface ResumenBodega {
 
 export interface InventarioBodegaResponse {
   resumen: ResumenBodega;
+  prensas?: PrensaInventario[];
   cubas_preflotacion: CubaInventario[];
   cubas_fermentacion: CubaInventario[];
 }
