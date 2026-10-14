@@ -70,29 +70,55 @@ export interface TrazabilidadViajeResponse {
 export interface PrensaInventario {
   equipo: string;
   grupo_mezcla: string;
+  estado_operativo?: 'OPERANDO' | 'RESERVADA' | 'DISPONIBLE';
   volumen: number;
+  volumen_real?: number;
+  volumen_proyectado?: number;
+  volumen_total?: number;
   capacidad: number;
   porcentaje_ocupacion: number;
+  porcentaje_real?: number;
+  porcentaje_proyectado?: number;
+  porcentaje_total?: number;
   fecha_actualizacion: string;
 }
 
 export interface CubaInventario {
   cuba: string;
   grupo_mezcla: string;
+  estado_operativo?: 'OPERANDO' | 'RESERVADA' | 'DISPONIBLE';
   volumen_litros: number;
+  volumen_real?: number;
+  volumen_proyectado?: number;
+  volumen_total?: number;
   capacidad_litros: number;
   porcentaje_ocupacion: number;
+  porcentaje_real?: number;
+  porcentaje_proyectado?: number;
+  porcentaje_total?: number;
   fecha_actualizacion: string;
 }
 
 export interface ResumenBodega {
   total_equipos_ocupados?: number;
   total_prensas_ocupadas?: number;
+  prensas_activas_real?: number;
+  prensas_reservadas_proy?: number;
   total_cubas_ocupadas?: number;
   total_cubas_pf_ocupadas: number;
+  cubas_pf_activas_real?: number;
+  cubas_pf_reservadas_proy?: number;
   total_cubas_f_ocupadas: number;
+  cubas_f_activas_real?: number;
+  cubas_f_reservadas_proy?: number;
+  volumen_real_uva_prensas_kg?: number;
+  volumen_proy_uva_prensas_kg?: number;
   volumen_total_uva_prensas_kg?: number;
+  volumen_real_turbio_litros?: number;
+  volumen_proy_turbio_litros?: number;
   volumen_total_turbio_litros: number;
+  volumen_real_clarificado_litros?: number;
+  volumen_proy_clarificado_litros?: number;
   volumen_total_clarificado_litros: number;
   rendimiento_global_teorico: number;
 }

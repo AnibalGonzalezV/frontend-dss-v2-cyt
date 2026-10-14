@@ -86,41 +86,71 @@ export const BodegaPipeline: React.FC<BodegaPipelineProps> = ({ virtualTime, onS
 
   return (
     <div className="h-full bg-slate-100 flex flex-col overflow-y-auto p-4 gap-4">
-      {/* KPI BAR SUPERIOR DE BODEGA */}
+      {/* KPI BAR SUPERIOR DE BODEGA CON SEGREGACIÓN FÍSICO REAL VS PROYECTADO MPC */}
       <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs flex flex-wrap items-center justify-between gap-4 shrink-0">
         <div className="flex flex-wrap items-center gap-6">
           <div className="flex flex-col">
-            <span className="text-[10px] uppercase font-bold text-blue-500">Prensas en Operación</span>
-            <span className="text-xl font-black text-blue-700">
-              {data?.resumen.total_prensas_ocupadas ?? 0} / 12
-            </span>
+            <span className="text-[10px] uppercase font-bold text-blue-600">Prensas en Operación</span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-xl font-black text-blue-700">
+                {data?.resumen.prensas_activas_real ?? 0}
+              </span>
+              <span className="text-xs font-bold text-slate-400">/ 12</span>
+              {(data?.resumen.prensas_reservadas_proy ?? 0) > 0 && (
+                <span className="text-[11px] font-mono font-semibold text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                  +{data?.resumen.prensas_reservadas_proy} Reservadas
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="h-8 border-l border-slate-200 hidden sm:block"></div>
 
           <div className="flex flex-col">
-            <span className="text-[10px] uppercase font-bold text-slate-400">Total Cubas Ocupadas</span>
-            <span className="text-xl font-black text-slate-800">
-              {data?.resumen.total_cubas_ocupadas ?? 0}
-            </span>
+            <span className="text-[10px] uppercase font-bold text-slate-500">Cubas PF Activas</span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-xl font-black text-slate-800">
+                {data?.resumen.cubas_pf_activas_real ?? 0}
+              </span>
+              <span className="text-xs font-bold text-slate-400">/ 24</span>
+              {(data?.resumen.cubas_pf_reservadas_proy ?? 0) > 0 && (
+                <span className="text-[11px] font-mono font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                  +{data?.resumen.cubas_pf_reservadas_proy} Reservadas
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="h-8 border-l border-slate-200 hidden sm:block"></div>
 
           <div className="flex flex-col">
             <span className="text-[10px] uppercase font-bold text-amber-600">Mosto Turbio (Pre-Flotación)</span>
-            <span className="text-xl font-black text-amber-700">
-              {(data?.resumen.volumen_total_turbio_litros ?? 0).toLocaleString('es-CL', { maximumFractionDigits: 0 })} L
-            </span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-xl font-black text-amber-700">
+                {(data?.resumen.volumen_real_turbio_litros ?? 0).toLocaleString('es-CL', { maximumFractionDigits: 0 })} L
+              </span>
+              {(data?.resumen.volumen_proy_turbio_litros ?? 0) > 0 && (
+                <span className="text-[10px] font-mono font-semibold text-amber-700/80 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                  +{(data?.resumen.volumen_proy_turbio_litros ?? 0).toLocaleString('es-CL', { maximumFractionDigits: 0 })} L Proy.
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="h-8 border-l border-slate-200 hidden sm:block"></div>
 
           <div className="flex flex-col">
             <span className="text-[10px] uppercase font-bold text-emerald-600">Mosto Clarificado (Fermentación)</span>
-            <span className="text-xl font-black text-emerald-700">
-              {(data?.resumen.volumen_total_clarificado_litros ?? 0).toLocaleString('es-CL', { maximumFractionDigits: 0 })} L
-            </span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-xl font-black text-emerald-700">
+                {(data?.resumen.volumen_real_clarificado_litros ?? 0).toLocaleString('es-CL', { maximumFractionDigits: 0 })} L
+              </span>
+              {(data?.resumen.volumen_proy_clarificado_litros ?? 0) > 0 && (
+                <span className="text-[10px] font-mono font-semibold text-emerald-700/80 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                  +{(data?.resumen.volumen_proy_clarificado_litros ?? 0).toLocaleString('es-CL', { maximumFractionDigits: 0 })} L Proy.
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="h-8 border-l border-slate-200 hidden sm:block"></div>
@@ -162,25 +192,38 @@ export const BodegaPipeline: React.FC<BodegaPipelineProps> = ({ virtualTime, onS
               Extracción neumática de mosto turbio (80.000 kg capacidad unitaria). Descarga continua hacia pre-flotación.
             </p>
           </div>
-          <span className="text-xs font-mono font-bold bg-blue-50 text-blue-800 px-2.5 py-1 rounded-md border border-blue-200">
-            {data?.resumen.total_prensas_ocupadas ?? 0} / 12 En Prensado
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono font-bold bg-blue-100 text-blue-800 px-2.5 py-1 rounded-md border border-blue-200">
+              {data?.resumen.prensas_activas_real ?? 0} En Descarga Real
+            </span>
+            {(data?.resumen.prensas_reservadas_proy ?? 0) > 0 && (
+              <span className="text-xs font-mono font-bold bg-blue-50 text-blue-700 px-2.5 py-1 rounded-md border border-dashed border-blue-300">
+                +{data?.resumen.prensas_reservadas_proy} Reservadas (MPC)
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 pt-1">
           {todasPrensas.map((pr) => {
             const ocupada = mapaPrensas.get(pr.nombre);
-            const volumen = ocupada ? ocupada.volumen : 0;
-            const pct = ocupada ? ocupada.porcentaje_ocupacion : 0;
+            const volReal = ocupada?.volumen_real ?? 0;
+            const volProy = ocupada?.volumen_proyectado ?? 0;
+            const pctReal = ocupada?.porcentaje_real ?? 0;
+            const pctProy = ocupada?.porcentaje_proyectado ?? 0;
             const grupo = ocupada ? ocupada.grupo_mezcla : null;
             const colorClases = grupo ? getGroupColor(grupo) : 'bg-slate-300 text-slate-600';
+            const esOperando = volReal > 0.1;
+            const esReservada = !esOperando && volProy > 0.1;
 
             return (
               <div
                 key={pr.nombre}
                 className={`p-3 rounded-xl border transition-all flex flex-col justify-between ${
-                  ocupada
-                    ? 'bg-blue-50/40 border-blue-300 shadow-xs hover:border-blue-500 hover:shadow-md cursor-pointer'
+                  esOperando
+                    ? 'bg-blue-50/40 border-blue-400 shadow-xs hover:border-blue-500 hover:shadow-md cursor-pointer'
+                    : esReservada
+                    ? 'bg-blue-50/20 border-dashed border-blue-300 shadow-2xs hover:border-blue-400'
                     : 'bg-slate-50/60 border-slate-200 opacity-60'
                 }`}
               >
@@ -191,24 +234,55 @@ export const BodegaPipeline: React.FC<BodegaPipelineProps> = ({ virtualTime, onS
                   </span>
                 </div>
 
-                {ocupada ? (
+                {esOperando ? (
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${colorClases}`}>
                         {grupo}
                       </span>
-                      <span className="text-xs font-black text-blue-900 font-mono">{pct.toFixed(1)}%</span>
+                      <span className="text-xs font-black text-blue-900 font-mono">
+                        {pctReal.toFixed(1)}% {pctProy > 0 ? `(+${pctProy.toFixed(1)}%p)` : ''}
+                      </span>
+                    </div>
+
+                    <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden flex">
+                      <div
+                        className="bg-blue-600 h-1.5 transition-all duration-500"
+                        style={{ width: `${Math.min(100, pctReal)}%` }}
+                      />
+                      {pctProy > 0 && (
+                        <div
+                          className="bg-blue-300 h-1.5 transition-all duration-500 opacity-80"
+                          style={{ width: `${Math.min(100 - pctReal, pctProy)}%` }}
+                        />
+                      )}
+                    </div>
+
+                    <div className="text-[10px] font-mono block text-right text-slate-600">
+                      <span className="font-bold text-blue-900">{volReal.toLocaleString('es-CL')} kg</span>
+                      {volProy > 0 && <span className="text-blue-600/80 font-normal"> (+{volProy.toLocaleString('es-CL')} proy)</span>}
+                    </div>
+                  </div>
+                ) : esReservada ? (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border border-dashed ${colorClases}`}>
+                        {grupo}
+                      </span>
+                      <span className="text-[10px] font-bold text-blue-700 font-mono uppercase bg-blue-100/70 px-1 rounded">
+                        Reservada
+                      </span>
                     </div>
 
                     <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
                       <div
-                        className="bg-blue-600 h-1.5 rounded-full transition-all duration-500"
-                        style={{ width: `${Math.min(100, pct)}%` }}
+                        className="bg-blue-400 h-1.5 rounded-full transition-all duration-500 opacity-70"
+                        style={{ width: `${Math.min(100, pctProy)}%` }}
                       />
                     </div>
 
-                    <span className="text-[10px] font-mono font-bold text-slate-600 block text-right">
-                      {volumen.toLocaleString('es-CL', { maximumFractionDigits: 0 })} kg uva
+                    <span className="text-[10px] font-mono font-medium text-blue-700 block text-right">
+                      +{volProy.toLocaleString('es-CL')} kg proy. ({pctProy.toFixed(1)}%)
                     </span>
                   </div>
                 ) : (
@@ -233,26 +307,39 @@ export const BodegaPipeline: React.FC<BodegaPipelineProps> = ({ virtualTime, onS
               Almacenamiento de mosto turbio tras prensado (&rho; = 0,6536 L/kg). Segregación estricta por grupo de mezcla.
             </p>
           </div>
-          <span className="text-xs font-mono font-bold bg-amber-50 text-amber-800 px-2.5 py-1 rounded-md border border-amber-200">
-            {data?.resumen.total_cubas_pf_ocupadas ?? 0} / 24 Ocupadas
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono font-bold bg-amber-100 text-amber-800 px-2.5 py-1 rounded-md border border-amber-200">
+              {data?.resumen.cubas_pf_activas_real ?? 0} Activas en Físico
+            </span>
+            {(data?.resumen.cubas_pf_reservadas_proy ?? 0) > 0 && (
+              <span className="text-xs font-mono font-bold bg-amber-50 text-amber-700 px-2.5 py-1 rounded-md border border-dashed border-amber-300">
+                +{data?.resumen.cubas_pf_reservadas_proy} Reservadas (MPC)
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3 pt-1">
           {todasCubasPF.map((pf) => {
             const ocupada = mapaCubasPF.get(pf.nombre);
-            const volumen = ocupada ? ocupada.volumen_litros : 0;
-            const pct = ocupada ? ocupada.porcentaje_ocupacion : 0;
+            const volReal = ocupada?.volumen_real ?? 0;
+            const volProy = ocupada?.volumen_proyectado ?? 0;
+            const pctReal = ocupada?.porcentaje_real ?? 0;
+            const pctProy = ocupada?.porcentaje_proyectado ?? 0;
             const grupo = ocupada ? ocupada.grupo_mezcla : null;
             const colorClases = grupo ? getGroupColor(grupo) : 'bg-slate-300 text-slate-600';
+            const esOperando = volReal > 0.1;
+            const esReservada = !esOperando && volProy > 0.1;
 
             return (
               <div
                 key={pf.nombre}
                 onClick={() => onSelectCuba && onSelectCuba(pf.nombre)}
                 className={`p-3 rounded-xl border transition-all flex flex-col justify-between ${
-                  ocupada
-                    ? 'bg-amber-50/40 border-amber-300 shadow-xs hover:border-amber-500 hover:shadow-md cursor-pointer'
+                  esOperando
+                    ? 'bg-amber-50/40 border-amber-400 shadow-xs hover:border-amber-500 hover:shadow-md cursor-pointer'
+                    : esReservada
+                    ? 'bg-amber-50/20 border-dashed border-amber-300 shadow-2xs hover:border-amber-400 cursor-pointer'
                     : 'bg-slate-50/60 border-slate-200 opacity-60'
                 }`}
               >
@@ -263,24 +350,55 @@ export const BodegaPipeline: React.FC<BodegaPipelineProps> = ({ virtualTime, onS
                   </span>
                 </div>
 
-                {ocupada ? (
+                {esOperando ? (
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${colorClases}`}>
                         {grupo}
                       </span>
-                      <span className="text-xs font-black text-amber-900 font-mono">{pct.toFixed(1)}%</span>
+                      <span className="text-xs font-black text-amber-900 font-mono">
+                        {pctReal.toFixed(1)}% {pctProy > 0 ? `(+${pctProy.toFixed(1)}%p)` : ''}
+                      </span>
+                    </div>
+
+                    <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden flex">
+                      <div
+                        className="bg-amber-600 h-1.5 transition-all duration-500"
+                        style={{ width: `${Math.min(100, pctReal)}%` }}
+                      />
+                      {pctProy > 0 && (
+                        <div
+                          className="bg-amber-300 h-1.5 transition-all duration-500 opacity-80"
+                          style={{ width: `${Math.min(100 - pctReal, pctProy)}%` }}
+                        />
+                      )}
+                    </div>
+
+                    <div className="text-[10px] font-mono block text-right text-slate-600">
+                      <span className="font-bold text-amber-900">{volReal.toLocaleString('es-CL')} L</span>
+                      {volProy > 0 && <span className="text-amber-700/80 font-normal"> (+{volProy.toLocaleString('es-CL')} proy)</span>}
+                    </div>
+                  </div>
+                ) : esReservada ? (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border border-dashed ${colorClases}`}>
+                        {grupo}
+                      </span>
+                      <span className="text-[10px] font-bold text-amber-700 font-mono uppercase bg-amber-100/70 px-1 rounded">
+                        Reservada
+                      </span>
                     </div>
 
                     <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
                       <div
-                        className="bg-amber-600 h-1.5 rounded-full transition-all duration-500"
-                        style={{ width: `${Math.min(100, pct)}%` }}
+                        className="bg-amber-400 h-1.5 rounded-full transition-all duration-500 opacity-70"
+                        style={{ width: `${Math.min(100, pctProy)}%` }}
                       />
                     </div>
 
-                    <span className="text-[10px] font-mono font-bold text-slate-600 block text-right">
-                      {volumen.toLocaleString('es-CL', { maximumFractionDigits: 0 })} L
+                    <span className="text-[10px] font-mono font-medium text-amber-700 block text-right">
+                      +{volProy.toLocaleString('es-CL')} L proy. ({pctProy.toFixed(1)}%)
                     </span>
                   </div>
                 ) : (
@@ -384,39 +502,86 @@ export const BodegaPipeline: React.FC<BodegaPipelineProps> = ({ virtualTime, onS
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3 pt-1">
             {cubasFFiltradas.map((cf) => {
               const colorClases = getGroupColor(cf.grupo_mezcla);
+              const volReal = cf.volumen_real ?? 0;
+              const volProy = cf.volumen_proyectado ?? 0;
+              const pctReal = cf.porcentaje_real ?? 0;
+              const pctProy = cf.porcentaje_proyectado ?? 0;
+              const esOperando = volReal > 0.1;
+              const esReservada = !esOperando && volProy > 0.1;
 
               return (
                 <div
                   key={cf.cuba}
                   onClick={() => onSelectCuba && onSelectCuba(cf.cuba)}
-                  className="p-3 rounded-xl border border-emerald-200 bg-emerald-50/30 hover:border-emerald-400 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer"
+                  className={`p-3 rounded-xl border transition-all flex flex-col justify-between cursor-pointer ${
+                    esOperando
+                      ? 'border-emerald-400 bg-emerald-50/40 shadow-xs hover:border-emerald-500 hover:shadow-md'
+                      : esReservada
+                      ? 'border-dashed border-emerald-300 bg-emerald-50/20 shadow-2xs hover:border-emerald-400'
+                      : 'border-slate-200 bg-slate-50/60 opacity-60'
+                  }`}
                 >
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="font-mono text-xs font-bold text-slate-800">{cf.cuba}</span>
                     <span className="text-[10px] font-mono text-slate-500 font-semibold">65k L</span>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${colorClases}`}>
-                        {cf.grupo_mezcla}
-                      </span>
-                      <span className="text-xs font-black text-emerald-900 font-mono">
-                        {cf.porcentaje_ocupacion.toFixed(1)}%
+                  {esOperando ? (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${colorClases}`}>
+                          {cf.grupo_mezcla}
+                        </span>
+                        <span className="text-xs font-black text-emerald-900 font-mono">
+                          {pctReal.toFixed(1)}% {pctProy > 0 ? `(+${pctProy.toFixed(1)}%p)` : ''}
+                        </span>
+                      </div>
+
+                      <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden flex">
+                        <div
+                          className="bg-emerald-600 h-1.5 transition-all duration-500"
+                          style={{ width: `${Math.min(100, pctReal)}%` }}
+                        />
+                        {pctProy > 0 && (
+                          <div
+                            className="bg-emerald-300 h-1.5 transition-all duration-500 opacity-80"
+                            style={{ width: `${Math.min(100 - pctReal, pctProy)}%` }}
+                          />
+                        )}
+                      </div>
+
+                      <div className="text-[10px] font-mono block text-right text-slate-600">
+                        <span className="font-bold text-emerald-900">{volReal.toLocaleString('es-CL')} L</span>
+                        {volProy > 0 && <span className="text-emerald-700/80 font-normal"> (+{volProy.toLocaleString('es-CL')} proy)</span>}
+                      </div>
+                    </div>
+                  ) : esReservada ? (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border border-dashed ${colorClases}`}>
+                          {cf.grupo_mezcla}
+                        </span>
+                        <span className="text-[10px] font-bold text-emerald-700 font-mono uppercase bg-emerald-100/70 px-1 rounded">
+                          Reservada
+                        </span>
+                      </div>
+
+                      <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className="bg-emerald-400 h-1.5 rounded-full transition-all duration-500 opacity-70"
+                          style={{ width: `${Math.min(100, pctProy)}%` }}
+                        />
+                      </div>
+
+                      <span className="text-[10px] font-mono font-medium text-emerald-700 block text-right">
+                        +{volProy.toLocaleString('es-CL')} L proy. ({pctProy.toFixed(1)}%)
                       </span>
                     </div>
-
-                    <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                      <div
-                        className="bg-emerald-600 h-1.5 rounded-full transition-all duration-500"
-                        style={{ width: `${Math.min(100, cf.porcentaje_ocupacion)}%` }}
-                      />
+                  ) : (
+                    <div className="py-2 text-center">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Vacía</span>
                     </div>
-
-                    <span className="text-[10px] font-mono font-bold text-slate-600 block text-right">
-                      {cf.volumen_litros.toLocaleString('es-CL', { maximumFractionDigits: 0 })} L
-                    </span>
-                  </div>
+                  )}
                 </div>
               );
             })}
