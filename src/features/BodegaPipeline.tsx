@@ -34,12 +34,12 @@ export const BodegaPipeline: React.FC<BodegaPipelineProps> = ({ virtualTime, onS
     cargarInventario();
   }, [virtualTime]);
 
-  // Lista estática completa de 12 Prensas Neumáticas (50.000 kg c/u)
+  // Lista estática completa de 12 Prensas Neumáticas (80.000 kg c/u según modelo matemático)
   const todasPrensas = useMemo(() => {
     const list: { nombre: string; capacidad: number }[] = [];
     for (let i = 1; i <= 12; i++) {
       const pad = i < 10 ? `0${i}` : `${i}`;
-      list.push({ nombre: `PR_${pad}`, capacidad: 50000 });
+      list.push({ nombre: `PR_${pad}`, capacidad: 80000 });
     }
     return list;
   }, []);
@@ -159,7 +159,7 @@ export const BodegaPipeline: React.FC<BodegaPipelineProps> = ({ virtualTime, onS
               Batería de Prensado Neumático (12 Prensas Industriales PR)
             </h2>
             <p className="text-xs text-slate-500 font-mono">
-              Extracción neumática de mosto turbio (50.000 kg capacidad unitaria). Descarga continua hacia pre-flotación.
+              Extracción neumática de mosto turbio (80.000 kg capacidad unitaria). Descarga continua hacia pre-flotación.
             </p>
           </div>
           <span className="text-xs font-mono font-bold bg-blue-50 text-blue-800 px-2.5 py-1 rounded-md border border-blue-200">
