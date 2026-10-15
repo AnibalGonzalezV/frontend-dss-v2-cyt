@@ -11,12 +11,33 @@ interface TableroGanttProps {
   onSelectViaje?: (viajeId: number) => void;
 }
 
+type ZoomMode = 'DETALLE' | 'FIT_24H';
+
 export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, onUpdate, onSelectViaje }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   
   // Estado para el Modal de Fijación Manual
   const [selectedAsig, setSelectedAsig] = useState<{asig: BloqueGantt, pozo: Pozo} | null>(null);
   const [loadingPin, setLoadingPin] = useState(false);
+
+  // Estados de Navegación y Auditoría Histórica (Módulo 8)
+  const [zoomMode, setZoomMode] = useState<ZoomMode>('DETALLE');
+  const [atenuarPasado, setAtenuarPasado] = useState<boolean>(false);
+  const [autoScrollEnabled, setAutoScrollEnabled] = useState<boolean>(true);
+  const [containerWidth, setContainerWidth] = useState<number>(1400);
+
+  // Monitoreo de ancho disponible para modo FIT_24H
+  useEffect(() => {
+    if (!scrollContainerRef.current) return;
+    const updateWidth = () => {
+      if (scrollContainerRef.current) {
+        setContainerWidth(scrollContainerRef.current.clientWidth);
+      }
+    };
+    updateWidth();
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, []);
 
   const shiftDay = useMemo(() => {
     if (!virtualTime) return null;
@@ -37,27 +58,72 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
       startTime: start,
       hoursToShow: 24 
     };
-  }, [shiftDay]); // Solo recalcula si el "Día de Turno" cambia
+  }, [shiftDay]);
 
-  // Auto-scroll logic (ahora ejecutado de forma segura después de inicializar startTime)
+  // Escala horizontal dinámica (210px en Detalle vs ~65px en Día Completo)
+  const hourWidth = useMemo(() => {
+    if (zoomMode === 'FIT_24H') {
+      const availableWidth = Math.max(containerWidth - 224, 1380);
+      return Math.floor(availableWidth / hoursToShow);
+    }
+    return 210;
+  }, [zoomMode, containerWidth, hoursToShow]);
+
+  const totalMinutes = hoursToShow * 60;
+  const totalWidth = hoursToShow * hourWidth;
+
+  // Auto-scroll logic con detección de seguimiento
   useEffect(() => {
-    if (virtualTime && scrollContainerRef.current) {
+    if (virtualTime && scrollContainerRef.current && autoScrollEnabled && zoomMode === 'DETALLE') {
       const base = startTime.getTime();
-      const totalMinutes = hoursToShow * 60;
-      const leftPercent = ((virtualTime - base) / (totalMinutes * 60 * 1000));
-      const totalWidthPx = hoursToShow * 240;
+      const totalMin = hoursToShow * 60;
+      const leftPercent = ((virtualTime - base) / (totalMin * 60 * 1000));
+      const totalWidthPx = hoursToShow * hourWidth;
       const targetScroll = leftPercent * totalWidthPx;
       
       scrollContainerRef.current.scrollTo({
-        left: Math.max(0, targetScroll - 400),
+        left: Math.max(0, targetScroll - 380),
         behavior: 'smooth'
       });
     }
-  }, [virtualTime, startTime, hoursToShow]);
+  }, [virtualTime, startTime, hoursToShow, hourWidth, autoScrollEnabled, zoomMode]);
 
-  const totalMinutes = hoursToShow * 60;
-  const hourWidth = 240; 
-  const totalWidth = hoursToShow * hourWidth;
+  // Detección de scroll manual del usuario para pausar seguimiento sin interrumpir auditoría
+  const handleContainerScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (!virtualTime || zoomMode === 'FIT_24H') return;
+    const base = startTime.getTime();
+    const totalMin = hoursToShow * 60;
+    const leftPercent = ((virtualTime - base) / (totalMin * 60 * 1000));
+    const totalWidthPx = hoursToShow * hourWidth;
+    const targetScroll = Math.max(0, leftPercent * totalWidthPx - 380);
+    const currentScroll = e.currentTarget.scrollLeft;
+
+    if (Math.abs(currentScroll - targetScroll) > 280 && autoScrollEnabled) {
+      setAutoScrollEnabled(false);
+    }
+  };
+
+  // Navegación rápida
+  const scrollToStart = () => {
+    setAutoScrollEnabled(false);
+    scrollContainerRef.current?.scrollTo({ left: 0, behavior: 'smooth' });
+  };
+
+  const scrollToNow = () => {
+    setAutoScrollEnabled(true);
+    if (scrollContainerRef.current && virtualTime) {
+      const base = startTime.getTime();
+      const totalMin = hoursToShow * 60;
+      const leftPercent = ((virtualTime - base) / (totalMin * 60 * 1000));
+      const targetScroll = Math.max(0, leftPercent * hoursToShow * hourWidth - 380);
+      scrollContainerRef.current.scrollTo({ left: targetScroll, behavior: 'smooth' });
+    }
+  };
+
+  const scrollToEnd = () => {
+    setAutoScrollEnabled(false);
+    scrollContainerRef.current?.scrollTo({ left: totalWidth, behavior: 'smooth' });
+  };
 
   const hourLabels = Array.from({ length: hoursToShow + 1 }).map((_, i) => {
     const d = new Date(startTime.getTime() + i * 60 * 60 * 1000);
@@ -92,32 +158,113 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
   }
 
   return (
-    <div className="h-full bg-white flex flex-col font-sans overflow-hidden">
+    <div className="h-full bg-white flex flex-col font-sans overflow-hidden relative">
       
-      <div className="flex justify-between items-center p-4 border-b border-gray-200 bg-white z-[70]">
-        <div>
-          <h2 className="text-xl font-bold text-gray-800">Asignación Operativa</h2>
-          <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Horizonte Predictivo MPC</p>
+      {/* Cabecera Superior con Controles de Auditoría Histórica */}
+      <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200 bg-white z-[70] gap-4">
+        <div className="flex items-center gap-4 flex-wrap">
+          <div>
+            <h2 className="text-lg font-extrabold text-slate-800 leading-none">Asignación Operativa</h2>
+            <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold mt-1">Horizonte Predictivo MPC</p>
+          </div>
+
+          {/* Selector de Modo Zoom y Salto Temporal */}
+          <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
+            <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => {
+                  setZoomMode('DETALLE');
+                  setAutoScrollEnabled(true);
+                }}
+                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                  zoomMode === 'DETALLE' ? 'bg-white text-blue-600 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Detalle
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setZoomMode('FIT_24H');
+                  setAutoScrollEnabled(false);
+                }}
+                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                  zoomMode === 'FIT_24H' ? 'bg-white text-blue-600 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Día Completo (24h)
+              </button>
+            </div>
+
+            {zoomMode === 'DETALLE' && (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={scrollToStart}
+                  title="Ir al inicio de la jornada (08:00)"
+                  className="px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded border border-slate-200 cursor-pointer"
+                >
+                  |&lt; 08:00
+                </button>
+                <button
+                  type="button"
+                  onClick={scrollToNow}
+                  title="Centrar en hora actual y reanudar seguimiento"
+                  className="px-2 py-1 text-xs font-bold text-blue-600 hover:bg-blue-50 bg-blue-50/50 rounded border border-blue-200 cursor-pointer"
+                >
+                  Ahora
+                </button>
+                <button
+                  type="button"
+                  onClick={scrollToEnd}
+                  title="Ir al cierre de jornada (02:00)"
+                  className="px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded border border-slate-200 cursor-pointer"
+                >
+                  02:00 &gt;|
+                </button>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setAtenuarPasado(!atenuarPasado)}
+              title="Alternar atenuación en escala de grises para camiones finalizados"
+              className={`px-2 py-1 text-xs font-semibold rounded border transition-colors cursor-pointer ${
+                atenuarPasado
+                  ? 'bg-slate-200 text-slate-700 border-slate-300'
+                  : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+              }`}
+            >
+              {atenuarPasado ? 'Atenuación: ON' : 'Colores Nítidos'}
+            </button>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-3 text-[10px] font-bold text-slate-500 max-w-xl justify-end">
-           <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-emerald-500 rounded"></div> G-1</div>
-           <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-teal-500 rounded"></div> G-2</div>
-           <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-cyan-500 rounded"></div> G-3</div>
-           <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-sky-500 rounded"></div> G-4</div>
-           <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-blue-500 rounded"></div> G-5</div>
-           <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-indigo-500 rounded"></div> G-6</div>
-           <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-violet-500 rounded"></div> G-7</div>
-           <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-purple-500 rounded"></div> G-8</div>
-           <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-fuchsia-500 rounded"></div> G-9</div>
-           <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-rose-500 rounded"></div> G-10</div>
-           <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-amber-500 rounded"></div> G-11</div>
-           <div className="flex items-center gap-1.5 ml-2"><div className="w-3 h-3 bg-slate-500 rounded"></div> GENÉRICO</div>
+
+        {/* Leyenda de Grupos Enológicos */}
+        <div className="flex flex-wrap gap-2 text-[10px] font-bold text-slate-500 max-w-lg justify-end">
+           <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-emerald-500 rounded-xs"></div> G-1</div>
+           <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-teal-500 rounded-xs"></div> G-2</div>
+           <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-cyan-500 rounded-xs"></div> G-3</div>
+           <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-sky-500 rounded-xs"></div> G-4</div>
+           <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-blue-500 rounded-xs"></div> G-5</div>
+           <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-indigo-500 rounded-xs"></div> G-6</div>
+           <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-violet-500 rounded-xs"></div> G-7</div>
+           <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-purple-500 rounded-xs"></div> G-8</div>
+           <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-fuchsia-500 rounded-xs"></div> G-9</div>
+           <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-rose-500 rounded-xs"></div> G-10</div>
+           <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-amber-500 rounded-xs"></div> G-11</div>
+           <div className="flex items-center gap-1 ml-1"><div className="w-2.5 h-2.5 bg-slate-500 rounded-xs"></div> GEN</div>
         </div>
       </div>
 
-      <div ref={scrollContainerRef} className="flex-1 overflow-auto flex relative bg-slate-50 scroll-smooth">
+      <div 
+        ref={scrollContainerRef} 
+        onScroll={handleContainerScroll}
+        className="flex-1 overflow-auto flex relative bg-slate-50 scroll-smooth"
+      >
         
-        {/* COLUMNA IZQUIERDA */}
+        {/* COLUMNA IZQUIERDA (STICKY) */}
         <div className="w-56 flex-shrink-0 bg-white border-r border-gray-300 sticky left-0 z-[60] flex flex-col shadow-[4px_0_15px_-3px_rgba(0,0,0,0.1)]">
           <div className="h-12 border-b border-gray-300 flex items-center px-4 font-bold text-slate-500 bg-slate-100 text-sm z-[70] relative">
             MAQUINARIA
@@ -130,12 +277,12 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
           ))}
         </div>
 
-        {/* ÁREA SCROLLEABLE */}
+        {/* ÁREA DE LÍNEA TEMPORAL */}
         <div className="flex flex-col relative" style={{ minWidth: `${totalWidth}px` }}>
           
           <div className="h-12 border-b border-gray-200 flex bg-white sticky top-0 z-[55]">
             {hourLabels.map((label, i) => (
-              <div key={i} className="border-l border-gray-200 px-3 py-3 text-sm font-bold text-slate-500" style={{ width: `${hourWidth}px` }}>
+              <div key={i} className="border-l border-gray-200 px-2 py-3 text-sm font-bold text-slate-500 text-center" style={{ width: `${hourWidth}px` }}>
                 {label}
               </div>
             ))}
@@ -148,15 +295,16 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
               ))}
             </div>
 
-            {/* Sombreado del pasado (Muralla del Tiempo) */}
-              {redLineLeft > 0 && (
-                <div 
-                  className="absolute top-0 bottom-0 bg-slate-300/30 backdrop-grayscale-[0.5] z-0 pointer-events-none transition-all duration-500 ease-in-out"
-                  style={{ left: '0%', width: `${Math.min(redLineLeft, 100)}%` }}
-                />
-              )}
+            {/* Sombreado del pasado opcional */}
+            {atenuarPasado && redLineLeft > 0 && (
+              <div 
+                className="absolute top-0 bottom-0 bg-slate-300/30 backdrop-grayscale-[0.5] z-0 pointer-events-none transition-all duration-500 ease-in-out"
+                style={{ left: '0%', width: `${Math.min(redLineLeft, 100)}%` }}
+              />
+            )}
               
-              {redLineLeft >= 0 && redLineLeft <= 100 && (
+            {/* Línea Roja del Reloj Virtual */}
+            {redLineLeft >= 0 && redLineLeft <= 100 && (
               <div 
                 className="absolute top-0 bottom-0 border-l-2 border-red-500 border-dashed z-[58] transition-all duration-500 ease-in-out pointer-events-none" 
                 style={{ left: `${redLineLeft}%` }}
@@ -167,6 +315,7 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
               </div>
             )}
 
+            {/* Bloques de Asignación por Pozo */}
             {pozos.map((pozo, rowIndex) => (
               <div key={pozo.id} className="h-32 border-b border-gray-100 relative group/row hover:bg-slate-200/30 transition-colors z-10 hover:z-50">
                 {pozo.asignaciones.map(asig => {
@@ -177,18 +326,22 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
 
                    const endT = new Date(asig.hora_fin).getTime();
                    const isPast = virtualTime && endT <= virtualTime;
-                   let visualStateClass = isPast ? 'opacity-40 grayscale hover:grayscale-0 hover:opacity-100' : 'opacity-100 hover:-translate-y-1 hover:shadow-xl';
-                     
-                     const isTransito = asig.estado === 'TRANSITO';
-                     const isFirmAI = !asig.override_manual && (asig.estado === 'PATIO' || asig.estado === 'ROMANA');
-                     
-                     if (isTransito) {
-                         // Solo los GPS son fantasmas
-                         visualStateClass = 'opacity-85 border-2 border-dashed border-white/60 hover:opacity-100 hover:-translate-y-1 hover:shadow-xl bg-[linear-gradient(45deg,rgba(255,255,255,0.1)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.1)_50%,rgba(255,255,255,0.1)_75%,transparent_75%,transparent)] bg-[length:10px_10px]';
-                     } else if (isFirmAI) {
-                         // Camiones fisicos en el patio sin fijar manual: se ven solidos pero con opacidad completa
-                         visualStateClass = 'opacity-100 hover:-translate-y-1 hover:shadow-xl border border-white/20';
-                     }
+                   let visualStateClass = 'opacity-100 hover:-translate-y-1 hover:shadow-xl';
+                      
+                   const isTransito = asig.estado === 'TRANSITO';
+                   const isFirmAI = !asig.override_manual && (asig.estado === 'PATIO' || asig.estado === 'ROMANA');
+                      
+                   if (isTransito) {
+                     // Camiones GPS tentativos
+                     visualStateClass = 'opacity-85 border-2 border-dashed border-white/60 hover:opacity-100 hover:-translate-y-1 hover:shadow-xl bg-[linear-gradient(45deg,rgba(255,255,255,0.1)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.1)_50%,rgba(255,255,255,0.1)_75%,transparent_75%,transparent)] bg-[length:10px_10px]';
+                   } else if (isPast && atenuarPasado) {
+                     visualStateClass = 'opacity-40 grayscale hover:grayscale-0 hover:opacity-100';
+                   } else if (isPast && !atenuarPasado) {
+                     // Modo auditoría nítido: colores vivos con distinción de finalizado
+                     visualStateClass = 'opacity-95 hover:-translate-y-1 hover:shadow-xl border-l-4 border-l-slate-900/60 shadow-xs';
+                   } else if (isFirmAI) {
+                     visualStateClass = 'opacity-100 hover:-translate-y-1 hover:shadow-xl border border-white/20';
+                   }
 
                    const tooltipPos = rowIndex <= 1 ? 'top-full mt-2' : 'bottom-full mb-2';
                    const tooltipTriangle = rowIndex <= 1 ? 'bottom-full border-b-slate-900' : 'top-full border-t-slate-900';
@@ -202,7 +355,7 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
                        }}
                        className={`absolute top-4 bottom-4 rounded-lg ${colorClass} ${visualStateClass} group flex flex-col justify-center cursor-pointer transition-all z-10 hover:z-[65] ${asig.estado !== 'TRANSITO' ? 'border border-white/20' : ''}`}
                      >
-                       {/* Boton de Ajuste / Reasignacion Manual (Solo Patio, Romana o Descargando) */}
+                       {/* Botón de Ajuste Manual (en FIT_24H visible solo al hover para no tapar texto) */}
                        {(asig.estado === 'PATIO' || asig.estado === 'ROMANA' || asig.estado === 'DESCARGANDO') && (
                          <button
                            type="button"
@@ -210,23 +363,33 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
                              e.stopPropagation();
                              setSelectedAsig({asig, pozo});
                            }}
-                           title="Reasignar pozo / Fijar asignacion manual"
-                           className="absolute top-1 right-1 text-[9px] font-bold bg-slate-900/80 hover:bg-blue-600 text-white rounded px-1.5 py-0.5 shadow-xs flex items-center justify-center transition-colors z-20 cursor-pointer"
+                           title="Reasignar pozo / Fijar asignación manual"
+                           className={`absolute top-1 right-1 text-[9px] font-bold bg-slate-900/80 hover:bg-blue-600 text-white rounded px-1.5 py-0.5 shadow-xs flex items-center justify-center transition-colors z-20 cursor-pointer ${
+                             zoomMode === 'FIT_24H' ? 'hidden group-hover:flex' : ''
+                           }`}
                          >
                            {asig.override_manual ? 'F' : 'Ajustar'}
                          </button>
                        )}
 
-                       {/* Contenedor de texto */}
-                       <div className="flex flex-col px-2 overflow-hidden w-full items-center text-center">
-                         <div className="font-extrabold text-sm tracking-wide whitespace-nowrap text-ellipsis overflow-hidden w-full">{asig.patente}</div>
-                         <div className="text-[10px] font-medium opacity-90 whitespace-nowrap text-ellipsis overflow-hidden w-full">{asig.grupo}</div>
+                       {/* Contenedor de texto con ajuste responsivo a zoom */}
+                       <div className="flex flex-col px-1.5 overflow-hidden w-full items-center text-center leading-tight">
+                         <div className={`font-extrabold tracking-tight whitespace-nowrap text-ellipsis overflow-hidden w-full ${zoomMode === 'FIT_24H' ? 'text-[11px]' : 'text-sm'}`}>
+                           {asig.patente}
+                         </div>
+                         {zoomMode !== 'FIT_24H' && (
+                           <div className="text-[10px] font-medium opacity-90 whitespace-nowrap text-ellipsis overflow-hidden w-full">
+                             {asig.grupo}
+                           </div>
+                         )}
                        </div>
 
+                       {/* Tooltip de Auditoría */}
                        <div className={`absolute left-1/2 -translate-x-1/2 ${tooltipPos} hidden group-hover:block w-56 bg-slate-900 text-white text-xs rounded-xl p-4 shadow-2xl z-[75] pointer-events-none`}>
-                          {/* Etiqueta de Certidumbre */}
                           <div className="flex justify-center mb-3">
-                            {asig.estado === 'DESCARGANDO' ? (
+                            {asig.estado === 'FINALIZADO' ? (
+                                <span className="bg-slate-700/60 text-emerald-400 border border-emerald-500/40 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider">DESCARGA FINALIZADA</span>
+                            ) : asig.estado === 'DESCARGANDO' ? (
                                 <span className="bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider">OPERACIÓN ACTIVA</span>
                             ) : asig.estado === 'TRANSITO' ? (
                                 <span className="bg-slate-700/50 text-slate-300 border border-slate-600 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider">PLAN TENTATIVO (GPS)</span>
@@ -237,7 +400,9 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
                             )}
                           </div>
                           
-                          <div className="font-bold text-base mb-2 border-b border-slate-700 pb-2 text-center text-blue-100">{asig.patente} <span className="text-[10px] ml-2 text-slate-400 bg-slate-800 px-2 py-0.5 rounded">{asig.estado}</span></div>
+                          <div className="font-bold text-base mb-2 border-b border-slate-700 pb-2 text-center text-blue-100">
+                            {asig.patente} <span className="text-[10px] ml-2 text-slate-400 bg-slate-800 px-2 py-0.5 rounded">{asig.estado}</span>
+                          </div>
                           <div className="space-y-1.5">
                             <div className="flex justify-between"><span className="text-slate-400">Grupo:</span> <span className="font-bold">{asig.grupo}</span></div>
                             <div className="flex justify-between"><span className="text-slate-400">Peso:</span> <span className="font-bold">{(asig.peso_kg / 1000).toFixed(1)} Ton</span></div>
@@ -246,7 +411,7 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
                           
                           <div className="mt-3 pt-2 border-t border-slate-700 flex justify-between text-slate-300 font-mono text-center">
                             <span className="bg-slate-800 px-2 py-1 rounded">{new Date(asig.hora_inicio).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                            <span className="self-center text-slate-500">▶</span>
+                            <span className="self-center text-slate-500">&gt;</span>
                             <span className="bg-slate-800 px-2 py-1 rounded">{new Date(asig.hora_fin).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
                           </div>
                           
@@ -257,13 +422,28 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
                           <div className={`absolute ${tooltipTriangle} left-1/2 -translate-x-1/2 border-8 border-transparent`}></div>
                        </div>
                      </div>
-                   )
+                   );
                 })}
               </div>
             ))}
           </div>
         </div>
       </div>
+
+      {/* Pill Flotante de Retorno al Tiempo Real si el usuario navegó al pasado */}
+      {!autoScrollEnabled && zoomMode === 'DETALLE' && virtualTime && (
+        <div className="absolute bottom-4 right-6 z-[68] flex items-center gap-2 bg-slate-900/95 text-white px-3.5 py-2 rounded-full shadow-xl border border-slate-700 text-xs backdrop-blur-xs transition-all animate-in fade-in slide-in-from-bottom-2">
+          <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+          <span className="text-slate-300 font-medium">Navegando historial</span>
+          <button
+            type="button"
+            onClick={scrollToNow}
+            className="ml-1 bg-blue-600 hover:bg-blue-500 text-white px-2.5 py-0.5 rounded-full font-bold text-[11px] transition-colors cursor-pointer shadow-xs"
+          >
+            Volver a {new Date(virtualTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </button>
+        </div>
+      )}
 
       {/* Modal de Fijación Manual / Corrección */}
       {selectedAsig && (() => {
@@ -298,7 +478,7 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
                     setSelectedAsig(null);
                     onSelectViaje(vId);
                   }}
-                  className="w-full mb-5 py-2 px-3 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold border border-blue-200 transition-colors flex items-center justify-center gap-1.5 shadow-2xs"
+                  className="w-full mb-5 py-2 px-3 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold border border-blue-200 transition-colors flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
                 >
                   <svg className="w-4 h-4 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -315,7 +495,7 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
                       <button
                         key={p.id}
                         onClick={() => setSelectedAsig({...selectedAsig, pozo: p})}
-                        className={`flex-1 py-2.5 rounded-lg text-sm font-bold border transition-colors ${
+                        className={`flex-1 py-2.5 rounded-lg text-sm font-bold border transition-colors cursor-pointer ${
                           selectedAsig.pozo.id === p.id 
                             ? (isWarning ? 'bg-orange-100 border-orange-500 text-orange-700' : 'bg-blue-100 border-blue-600 text-blue-700')
                             : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
@@ -331,14 +511,14 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
                   <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Hora de Inicio</label>
                     <div className="flex gap-2">
-                      <button onClick={() => adjustTime(-10)} className="px-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-lg border border-slate-200">-10m</button>
+                      <button onClick={() => adjustTime(-10)} className="px-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-lg border border-slate-200 cursor-pointer">-10m</button>
                       <input 
                         type="datetime-local" 
                         className="flex-1 bg-slate-50 text-slate-900 border border-slate-300 rounded-lg p-2 text-sm font-bold text-center outline-none focus:ring-2 focus:ring-blue-500"
                         value={selectedAsig.asig.hora_inicio.slice(0, 16)}
                         onChange={(e) => setSelectedAsig({...selectedAsig, asig: {...selectedAsig.asig, hora_inicio: e.target.value}})}
                       />
-                      <button onClick={() => adjustTime(10)} className="px-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-lg border border-slate-200">+10m</button>
+                      <button onClick={() => adjustTime(10)} className="px-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-lg border border-slate-200 cursor-pointer">+10m</button>
                     </div>
                   </div>
                 )}
@@ -346,7 +526,7 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
 
               <div className="flex gap-3 mt-8">
                 <button 
-                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl transition-colors"
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl transition-colors cursor-pointer"
                   onClick={() => setSelectedAsig(null)}
                 >
                   Cancelar
@@ -354,7 +534,7 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
                 
                 {!isWarning && selectedAsig.asig.override_manual && (
                   <button 
-                    className="flex-1 bg-orange-100 hover:bg-orange-200 text-orange-700 font-bold py-3 rounded-xl transition-colors"
+                    className="flex-1 bg-orange-100 hover:bg-orange-200 text-orange-700 font-bold py-3 rounded-xl transition-colors cursor-pointer"
                     disabled={loadingPin}
                     onClick={async () => {
                       try {
@@ -370,7 +550,7 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
                 )}
                 
                 <button 
-                  className={`flex-1 font-bold py-3 rounded-xl transition-colors shadow-md text-white ${
+                  className={`flex-1 font-bold py-3 rounded-xl transition-colors shadow-md text-white cursor-pointer ${
                     isWarning 
                       ? 'bg-orange-500 hover:bg-orange-600 shadow-orange-500/30' 
                       : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/30'

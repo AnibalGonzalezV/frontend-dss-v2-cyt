@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ColaPatio } from './ColaPatio';
 import { TableroGantt } from './TableroGantt';
 import { BodegaPipeline } from './BodegaPipeline';
@@ -121,17 +121,10 @@ export const Dashboard = () => {
     return <div className="flex h-screen items-center justify-center text-xl font-semibold">Cargando Estado del Patio...</div>;
   }
 
-  const pozosVisibles = data?.pozos.map(pozo => {
-    return {
-      ...pozo,
-      asignaciones: pozo.asignaciones.filter(asig => {
-        if (!virtualTime) return true;
-        const inicio = new Date(asig.hora_inicio).getTime();
-        const fin = new Date(asig.hora_fin).getTime();
-        return inicio <= virtualTime + (4 * 3600000) && fin > virtualTime - 3600000; 
-      })
-    };
-  }) || [];
+  // Entrega el 100% de los camiones programados y finalizados al Gantt para permitir auditoría histórica retrospectiva
+  const pozosVisibles = useMemo(() => {
+    return data?.pozos || [];
+  }, [data?.pozos]);
 
   return (
     <div className="flex flex-col h-screen bg-slate-100">
