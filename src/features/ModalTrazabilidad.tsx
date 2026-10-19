@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { TrazabilidadViajeResponse, EslabonTrazabilidad } from '@/types';
 import { fetchTrazabilidadViaje } from '@/api/ganttService';
 import { getGroupColor } from '@/utils/colors';
+import { formatearNombreEquipo } from '@/utils/formatters';
 
 interface ModalTrazabilidadProps {
   viajeId: number | null;
@@ -219,16 +220,16 @@ export const ModalTrazabilidad: React.FC<ModalTrazabilidadProps> = ({ viajeId, i
                             </div>
 
                             <div className="flex items-center gap-3 my-2 text-slate-800">
-                              <span className="font-mono text-sm font-bold bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-2xs">
-                                {eslabon.origen}
+                              <span className="font-mono text-sm font-extrabold bg-white px-3 py-1.5 rounded-lg border border-slate-300 shadow-xs text-slate-900">
+                                {formatearNombreEquipo(eslabon.origen)}
                               </span>
-                              <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                              <svg className="w-4 h-4 text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3" />
                               </svg>
-                              <span className="font-mono text-sm font-bold bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-2xs">
-                                {eslabon.destino}
+                              <span className="font-mono text-sm font-extrabold bg-white px-3 py-1.5 rounded-lg border border-slate-300 shadow-xs text-slate-900">
+                                {formatearNombreEquipo(eslabon.destino)}
                               </span>
-                              <span className="ml-auto font-black text-sm text-slate-900 bg-white px-3 py-1.5 rounded-lg border border-slate-200">
+                              <span className="ml-auto font-black text-sm text-slate-950 bg-white px-3 py-1.5 rounded-lg border border-slate-300 shadow-xs">
                                 {eslabon.volumen.toLocaleString('es-CL', { maximumFractionDigits: 2 })} {eslabon.unidad.includes('kg') ? 'kg' : 'L'}
                               </span>
                             </div>
