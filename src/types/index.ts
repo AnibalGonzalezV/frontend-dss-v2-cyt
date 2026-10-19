@@ -69,6 +69,7 @@ export interface TrazabilidadViajeResponse {
 
 export interface PrensaInventario {
   equipo: string;
+  nombre_humano?: string;
   grupo_mezcla: string;
   estado_operativo?: 'OPERANDO' | 'RESERVADA' | 'DISPONIBLE';
   volumen: number;
@@ -80,11 +81,18 @@ export interface PrensaInventario {
   porcentaje_real?: number;
   porcentaje_proyectado?: number;
   porcentaje_total?: number;
+  batch_actual_kg?: number;
+  batch_actual_pct?: number;
+  total_procesado_kg?: number;
+  numero_batch?: number;
+  batches_completados?: number;
   fecha_actualizacion: string;
 }
 
 export interface CubaInventario {
   cuba: string;
+  equipo?: string;
+  nombre_humano?: string;
   grupo_mezcla: string;
   estado_operativo?: 'OPERANDO' | 'RESERVADA' | 'DISPONIBLE';
   volumen_litros: number;
@@ -141,12 +149,35 @@ export interface CamionMaquinaria {
   unidad: string;
   hora_flujo: string;
   origen: string;
+  origen_humano?: string;
   destino: string;
+  destino_humano?: string;
+}
+
+export interface BatchMaquinaria {
+  numero_batch: number;
+  estado_batch: 'EN_CURSO' | 'FINALIZADO' | 'PROYECTADO';
+  grupo_mezcla: string;
+  volumen_kg: number;
+  capacidad_kg: number;
+  porcentaje_ocupacion: number;
+  hora_inicio: string;
+  hora_fin_estimada: string;
+  camiones: CamionMaquinaria[];
+}
+
+export interface FasesMaquinaria {
+  en_descarga?: CamionMaquinaria[];
+  finalizados?: CamionMaquinaria[];
+  programados?: CamionMaquinaria[];
+  recibidos?: CamionMaquinaria[];
+  proyectados?: CamionMaquinaria[];
 }
 
 export interface DetalleMaquinariaResponse {
   equipo: {
     nombre: string;
+    nombre_humano?: string;
     tipo: string;
     capacidad: number;
     unidad: string;
@@ -156,6 +187,13 @@ export interface DetalleMaquinariaResponse {
     porcentaje_proyectado: number;
     estado_operativo: 'OPERANDO' | 'RESERVADA' | 'DISPONIBLE';
     grupo_mezcla: string | null;
+    batch_actual_kg?: number;
+    batch_actual_pct?: number;
+    total_procesado_kg?: number;
+    numero_batch?: number;
+    batches_completados?: number;
   };
+  batches?: BatchMaquinaria[];
+  fases?: FasesMaquinaria;
   camiones: CamionMaquinaria[];
 }

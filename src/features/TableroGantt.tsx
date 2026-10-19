@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useEffect, useState } from 'react';
 import { Pozo, BloqueGantt } from '@/types';
 import { getGroupColor } from '@/utils/colors';
 import { fijarAsignacion } from '@/api/ganttService';
+import { formatearNombreEquipo } from '@/utils/formatters';
 import toast from 'react-hot-toast';
 
 interface TableroGanttProps {
@@ -16,9 +17,11 @@ type ZoomMode = 'DETALLE' | 'FIT_24H';
 export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, onUpdate, onSelectViaje }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   
-  // Estado para el Modal de Fijación Manual
-  const [selectedAsig, setSelectedAsig] = useState<{asig: BloqueGantt, pozo: Pozo} | null>(null);
+  // Estado para el Modal de Fijación Manual y Corrección de Desvío en Terreno
+  const [selectedAsig, setSelectedAsig] = useState<{asig: BloqueGantt, pozo: Pozo, pozoOriginal: Pozo} | null>(null);
   const [loadingPin, setLoadingPin] = useState(false);
+  const [confirmacionFisica, setConfirmacionFisica] = useState<boolean>(false);
+  const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
 
   // Estados de Navegación y Auditoría Histórica (Módulo 8)
   const [zoomMode, setZoomMode] = useState<ZoomMode>('DETALLE');
@@ -271,7 +274,7 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
           </div>
           {pozos.map(pozo => (
             <div key={pozo.id} className="h-32 border-b border-gray-200 flex flex-col justify-center px-5 relative bg-white group transition-colors hover:bg-slate-50 hover:z-50">
-               <div className="font-extrabold text-lg text-slate-800">{pozo.nombre.replace('_', ' ')}</div>
+               <div className="font-extrabold text-lg text-slate-800">{formatearNombreEquipo(pozo.nombre)}</div>
                <div className="text-xs text-slate-400 font-medium">Capacidad: 50 ton/h</div>
             </div>
           ))}
@@ -361,7 +364,7 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
                            type="button"
                            onClick={(e) => {
                              e.stopPropagation();
-                             setSelectedAsig({asig, pozo});
+                             setSelectedAsig({asig, pozo, pozoOriginal: pozo}); setConfirmacionFisica(false); setShowConfirmModal(false);
                            }}
                            title="Reasignar pozo / Fijar asignación manual"
                            className={`absolute top-1 right-1 text-[9px] font-bold bg-slate-900/80 hover:bg-blue-600 text-white rounded px-1.5 py-0.5 shadow-xs flex items-center justify-center transition-colors z-20 cursor-pointer ${
@@ -448,7 +451,7 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
       {/* Modal de Fijación Manual / Corrección */}
       {selectedAsig && (() => {
         const isDescargando = selectedAsig.asig.estado === 'DESCARGANDO';
-        const isWarning = isDescargando;
+        const isDifferentPozo = selectedAsig.pozo.id !== selectedAsig.pozoOriginal.id;
         
         const adjustTime = (minutes: number) => {
           const dt = new Date(selectedAsig.asig.hora_inicio);
@@ -458,119 +461,278 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
           setSelectedAsig({...selectedAsig, asig: {...selectedAsig.asig, hora_inicio: localISOTime}});
         };
 
+        const closeModal = () => {
+          setSelectedAsig(null);
+          setConfirmacionFisica(false);
+          setShowConfirmModal(false);
+        };
+
+        const ejecutarDesvio = async () => {
+          try {
+            setLoadingPin(true);
+            await fijarAsignacion(selectedAsig.asig.id, selectedAsig.pozo.id, selectedAsig.asig.hora_inicio, true, true);
+            closeModal();
+            toast.success(`Desvío registrado: ${selectedAsig.asig.patente} corregido a ${formatearNombreEquipo(selectedAsig.pozo.nombre)}`);
+            if (onUpdate) onUpdate();
+          } catch (e: any) {
+            toast.error(e.message || 'Error al registrar desvío');
+          } finally {
+            setLoadingPin(false);
+          }
+        };
+
         return (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center">
-            <div className={`bg-white rounded-2xl shadow-2xl p-6 w-[450px] border-t-4 ${isWarning ? 'border-t-orange-500' : 'border-t-blue-600'}`}>
-              <h3 className={`text-xl font-bold mb-1 ${isWarning ? 'text-orange-600' : 'text-slate-800'}`}>
-                {isWarning ? 'Corrección de Pozo (En Descarga)' : 'Asignación Manual'}
-              </h3>
-              <p className="text-sm text-slate-500 mb-3">
-                Camión <span className="font-bold text-slate-800">{selectedAsig.asig.patente}</span> | 
-                Grupo <span className="font-bold text-slate-700">{selectedAsig.asig.grupo}</span>
-                {isWarning && <span className="block mt-1 text-orange-600 font-medium">Este camión está actualmente descargando.</span>}
-              </p>
-
-              {onSelectViaje && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const vId = selectedAsig.asig.viaje_id;
-                    setSelectedAsig(null);
-                    onSelectViaje(vId);
-                  }}
-                  className="w-full mb-5 py-2 px-3 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold border border-blue-200 transition-colors flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
-                >
-                  <svg className="w-4 h-4 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Auditar Trazabilidad Enológica (5 Etapas)
-                </button>
-              )}
-
-              <div className="space-y-5 mb-6">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Seleccionar Pozo {isWarning && '(Ubicación Física Real)'}</label>
-                  <div className="flex gap-2">
-                    {pozos.map(p => (
-                      <button
-                        key={p.id}
-                        onClick={() => setSelectedAsig({...selectedAsig, pozo: p})}
-                        className={`flex-1 py-2.5 rounded-lg text-sm font-bold border transition-colors cursor-pointer ${
-                          selectedAsig.pozo.id === p.id 
-                            ? (isWarning ? 'bg-orange-100 border-orange-500 text-orange-700' : 'bg-blue-100 border-blue-600 text-blue-700')
-                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                        }`}
-                      >
-                        {p.nombre.replace('_', ' ')}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                
-                {!isWarning && (
+          <>
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+              <div className={`bg-white rounded-2xl shadow-2xl p-6 w-[480px] border-t-4 transition-all ${
+                isDescargando ? 'border-t-amber-500' : 'border-t-blue-600'
+              }`}>
+                {/* Encabezado */}
+                <div className="flex items-start justify-between mb-3">
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Hora de Inicio</label>
-                    <div className="flex gap-2">
-                      <button onClick={() => adjustTime(-10)} className="px-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-lg border border-slate-200 cursor-pointer">-10m</button>
-                      <input 
-                        type="datetime-local" 
-                        className="flex-1 bg-slate-50 text-slate-900 border border-slate-300 rounded-lg p-2 text-sm font-bold text-center outline-none focus:ring-2 focus:ring-blue-500"
-                        value={selectedAsig.asig.hora_inicio.slice(0, 16)}
-                        onChange={(e) => setSelectedAsig({...selectedAsig, asig: {...selectedAsig.asig, hora_inicio: e.target.value}})}
-                      />
-                      <button onClick={() => adjustTime(10)} className="px-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-lg border border-slate-200 cursor-pointer">+10m</button>
-                    </div>
+                    <h3 className={`text-xl font-bold ${isDescargando ? 'text-amber-700' : 'text-slate-800'}`}>
+                      {isDescargando ? 'Corrección de Tolva (Descarga en Terreno)' : 'Asignación Manual de Pozo'}
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Camión <span className="font-bold text-slate-800">{selectedAsig.asig.patente}</span> | 
+                      Grupo <span className="font-bold text-slate-700">{selectedAsig.asig.grupo}</span> | 
+                      Estado <span className={`font-bold ${isDescargando ? 'text-amber-600' : 'text-blue-600'}`}>{selectedAsig.asig.estado}</span>
+                    </p>
                   </div>
-                )}
-              </div>
+                  {isDescargando && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-amber-100 text-amber-800 border border-amber-300 shrink-0">
+                      En Tolva
+                    </span>
+                  )}
+                </div>
 
-              <div className="flex gap-3 mt-8">
-                <button 
-                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl transition-colors cursor-pointer"
-                  onClick={() => setSelectedAsig(null)}
-                >
-                  Cancelar
-                </button>
-                
-                {!isWarning && selectedAsig.asig.override_manual && (
-                  <button 
-                    className="flex-1 bg-orange-100 hover:bg-orange-200 text-orange-700 font-bold py-3 rounded-xl transition-colors cursor-pointer"
-                    disabled={loadingPin}
-                    onClick={async () => {
-                      try {
-                        setLoadingPin(true);
-                        await fijarAsignacion(selectedAsig.asig.id, selectedAsig.pozo.id, selectedAsig.asig.hora_inicio, false);
-                        setSelectedAsig(null);
-                        toast.success('Asignación liberada'); if (onUpdate) onUpdate();
-                      } catch (e: any) { toast.error(e.message); } finally { setLoadingPin(false); }
+                {onSelectViaje && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const vId = selectedAsig.asig.viaje_id;
+                      closeModal();
+                      onSelectViaje(vId);
                     }}
+                    className="w-full mb-4 py-2 px-3 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold border border-blue-200 transition-colors flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
                   >
-                    {loadingPin ? '...' : 'Desfijar (Auto)'}
+                    <svg className="w-4 h-4 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Auditar Trazabilidad Enológica (5 Etapas)
                   </button>
                 )}
-                
-                <button 
-                  className={`flex-1 font-bold py-3 rounded-xl transition-colors shadow-md text-white cursor-pointer ${
-                    isWarning 
-                      ? 'bg-orange-500 hover:bg-orange-600 shadow-orange-500/30' 
-                      : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/30'
-                  }`}
-                  disabled={loadingPin}
-                  onClick={async () => {
-                    try {
-                      setLoadingPin(true);
-                      await fijarAsignacion(selectedAsig.asig.id, selectedAsig.pozo.id, selectedAsig.asig.hora_inicio, true, isWarning);
-                      setSelectedAsig(null);
-                      toast.success(isWarning ? 'Desviación registrada y re-optimizando' : 'Asignación fijada'); 
-                      if (onUpdate) onUpdate();
-                    } catch (e: any) { toast.error(e.message); } finally { setLoadingPin(false); }
-                  }}
-                >
-                  {loadingPin ? 'Guardando...' : (isWarning ? 'Forzar Corrección' : 'Fijar Plan')}
-                </button>
+
+                <div className="space-y-4 mb-6">
+                  {/* Selector de Pozo */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 uppercase mb-2">
+                      {isDescargando ? 'Seleccionar Tolva Física Real en Patio' : 'Seleccionar Pozo de Destino'}
+                    </label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {pozos.map(p => {
+                        const isCurrent = selectedAsig.pozo.id === p.id;
+                        const isOriginal = selectedAsig.pozoOriginal.id === p.id;
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedAsig({...selectedAsig, pozo: p});
+                              setConfirmacionFisica(false);
+                            }}
+                            className={`py-2.5 px-1 rounded-xl text-xs font-bold border transition-all cursor-pointer text-center relative ${
+                              isCurrent
+                                ? (isDescargando 
+                                    ? (isOriginal ? 'bg-slate-100 border-slate-400 text-slate-800 ring-2 ring-slate-400' : 'bg-amber-100 border-amber-500 text-amber-900 ring-2 ring-amber-500 shadow-sm')
+                                    : 'bg-blue-100 border-blue-600 text-blue-800 ring-2 ring-blue-500 shadow-sm')
+                                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            <div>{formatearNombreEquipo(p.nombre)}</div>
+                            {isDescargando && isOriginal && (
+                              <span className="text-[9px] font-normal text-slate-500 block">Actual</span>
+                            )}
+                            {isDescargando && isCurrent && !isOriginal && (
+                              <span className="text-[9px] font-bold text-amber-700 block">Nuevo</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Barrera 1: Panel de Impacto Operacional si es descarga activa y cambió de tolva */}
+                  {isDescargando && isDifferentPozo && (
+                    <div className="bg-amber-50/90 border border-amber-300 rounded-xl p-3.5 space-y-2 text-xs">
+                      <div className="flex items-center gap-2 font-bold text-amber-900">
+                        <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                        Desvío de Descarga Activa: Impacto en Bodega
+                      </div>
+                      <p className="text-slate-700 leading-tight">
+                        El jefe de patio certifica que el camión no está en su pozo planificado:
+                      </p>
+                      <div className="grid grid-cols-2 gap-2 pt-1 font-medium">
+                        <div className="bg-white p-2 rounded-lg border border-emerald-200">
+                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Tolva Origen</span>
+                          <span className="font-extrabold text-emerald-800 text-sm">{formatearNombreEquipo(selectedAsig.pozoOriginal.nombre)}</span>
+                          <span className="text-[11px] text-emerald-600 font-semibold block mt-0.5">Quedará LIBERADA</span>
+                        </div>
+                        <div className="bg-white p-2 rounded-lg border border-amber-300">
+                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Tolva Destino</span>
+                          <span className="font-extrabold text-amber-800 text-sm">{formatearNombreEquipo(selectedAsig.pozo.nombre)}</span>
+                          <span className="text-[11px] text-amber-600 font-semibold block mt-0.5">Quedará BLOQUEADA</span>
+                        </div>
+                      </div>
+                      <div className="text-[11px] text-slate-600 pt-1 leading-snug">
+                        El optimizador HiGHS reprogramará de forma inmediata la cola de espera para evitar colisiones operacionales.
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Barrera 2: Checkbox Obligatorio de Confirmación en Terreno */}
+                  {isDescargando && isDifferentPozo && (
+                    <label className="flex items-start gap-3 p-3 rounded-xl border border-amber-200 bg-amber-50/60 hover:bg-amber-50 cursor-pointer transition-colors text-xs text-slate-700 select-none">
+                      <input 
+                        type="checkbox" 
+                        checked={confirmacionFisica}
+                        onChange={(e) => setConfirmacionFisica(e.target.checked)}
+                        className="mt-0.5 rounded border-slate-300 text-amber-600 focus:ring-amber-500 w-4 h-4 cursor-pointer shrink-0"
+                      />
+                      <span className="leading-snug">
+                        <strong>Certifico inspección física:</strong> Verifiqué que el camión <strong className="text-slate-900">{selectedAsig.asig.patente}</strong> está descargando en <strong className="text-amber-900">{formatearNombreEquipo(selectedAsig.pozo.nombre)}</strong>.
+                      </span>
+                    </label>
+                  )}
+
+                  {/* Mensaje informativo si es descarga pero seleccionó el mismo pozo */}
+                  {isDescargando && !isDifferentPozo && (
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 leading-relaxed">
+                      El camión está actualmente descargando en <strong className="text-slate-800">{formatearNombreEquipo(selectedAsig.pozoOriginal.nombre)}</strong>. Si el conductor ingresó por error a otra tolva, seleccione la tolva correcta arriba para registrar el desvío.
+                    </div>
+                  )}
+
+                  {/* Hora de Inicio para camiones en PATIO / ROMANA */}
+                  {!isDescargando && (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Hora de Inicio</label>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => adjustTime(-10)} className="px-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-lg border border-slate-200 cursor-pointer">-10m</button>
+                        <input 
+                          type="datetime-local" 
+                          className="flex-1 bg-slate-50 text-slate-900 border border-slate-300 rounded-lg p-2 text-sm font-bold text-center outline-none focus:ring-2 focus:ring-blue-500"
+                          value={selectedAsig.asig.hora_inicio.slice(0, 16)}
+                          onChange={(e) => setSelectedAsig({...selectedAsig, asig: {...selectedAsig.asig, hora_inicio: e.target.value}})}
+                        />
+                        <button type="button" onClick={() => adjustTime(10)} className="px-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-lg border border-slate-200 cursor-pointer">+10m</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Botones del Modal Principal */}
+                <div className="flex gap-3 mt-6">
+                  <button 
+                    type="button"
+                    className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl transition-colors cursor-pointer text-sm"
+                    onClick={closeModal}
+                  >
+                    Cancelar
+                  </button>
+                  
+                  {!isDescargando && selectedAsig.asig.override_manual && (
+                    <button 
+                      type="button"
+                      className="flex-1 bg-orange-100 hover:bg-orange-200 text-orange-700 font-bold py-3 rounded-xl transition-colors cursor-pointer text-sm"
+                      disabled={loadingPin}
+                      onClick={async () => {
+                        try {
+                          setLoadingPin(true);
+                          await fijarAsignacion(selectedAsig.asig.id, selectedAsig.pozo.id, selectedAsig.asig.hora_inicio, false);
+                          closeModal();
+                          toast.success('Asignación liberada'); if (onUpdate) onUpdate();
+                        } catch (e: any) { toast.error(e.message); } finally { setLoadingPin(false); }
+                      }}
+                    >
+                      {loadingPin ? '...' : 'Desfijar (Auto)'}
+                    </button>
+                  )}
+
+                  {isDescargando ? (
+                    <button 
+                      type="button"
+                      disabled={loadingPin || !isDifferentPozo || !confirmacionFisica}
+                      onClick={() => setShowConfirmModal(true)}
+                      className={`flex-1 font-bold py-3 rounded-xl transition-all shadow-md text-sm text-white ${
+                        !isDifferentPozo || !confirmacionFisica
+                          ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
+                          : 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/30 cursor-pointer'
+                      }`}
+                    >
+                      {isDifferentPozo ? 'Validar Desvío Físico' : 'Sin Cambios'}
+                    </button>
+                  ) : (
+                    <button 
+                      type="button"
+                      className="flex-1 font-bold py-3 rounded-xl transition-colors shadow-md text-white bg-blue-600 hover:bg-blue-700 shadow-blue-500/30 cursor-pointer text-sm"
+                      disabled={loadingPin}
+                      onClick={async () => {
+                        try {
+                          setLoadingPin(true);
+                          await fijarAsignacion(selectedAsig.asig.id, selectedAsig.pozo.id, selectedAsig.asig.hora_inicio, true, false);
+                          closeModal();
+                          toast.success('Asignación fijada'); 
+                          if (onUpdate) onUpdate();
+                        } catch (e: any) { toast.error(e.message); } finally { setLoadingPin(false); }
+                      }}
+                    >
+                      {loadingPin ? 'Guardando...' : 'Fijar Plan'}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+
+            {/* Barrera 3: Modal Secundario de Confirmación Crítica */}
+            {showConfirmModal && (
+              <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-[110] flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl shadow-2xl p-6 w-[430px] border-t-4 border-t-amber-600 animate-in fade-in zoom-in duration-150">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-600"></span>
+                    <h4 className="text-lg font-bold text-slate-900">¿Confirmar Desvío en Terreno?</h4>
+                  </div>
+                  
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 my-3 text-xs space-y-1.5 text-slate-700">
+                    <div>Camión: <strong className="text-slate-900">{selectedAsig.asig.patente}</strong> ({selectedAsig.asig.grupo})</div>
+                    <div>Cambio de tolva: <strong className="text-emerald-700">{formatearNombreEquipo(selectedAsig.pozoOriginal.nombre)}</strong> &rarr; <strong className="text-amber-800">{formatearNombreEquipo(selectedAsig.pozo.nombre)}</strong></div>
+                  </div>
+
+                  <p className="text-xs text-slate-600 mb-5 leading-relaxed">
+                    Al confirmar, el sistema liberará <strong className="text-slate-800">{formatearNombreEquipo(selectedAsig.pozoOriginal.nombre)}</strong> de inmediato para otros camiones y bloqueará <strong className="text-slate-800">{formatearNombreEquipo(selectedAsig.pozo.nombre)}</strong> por el tiempo restante de descarga, recalculando todo el plan de bodega.
+                  </p>
+
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      disabled={loadingPin}
+                      onClick={() => setShowConfirmModal(false)}
+                      className="flex-1 py-2.5 rounded-xl font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 text-xs transition-colors cursor-pointer"
+                    >
+                      Volver a Revisar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={loadingPin}
+                      onClick={ejecutarDesvio}
+                      className="flex-1 py-2.5 rounded-xl font-bold text-white bg-amber-600 hover:bg-amber-700 shadow-md shadow-amber-600/30 text-xs transition-colors cursor-pointer"
+                    >
+                      {loadingPin ? 'Re-optimizando...' : 'Sí, Confirmar Desvío'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         );
       })()}
     </div>

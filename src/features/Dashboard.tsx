@@ -26,6 +26,11 @@ export const Dashboard = () => {
   // Extraemos el reloj virtual de la base de datos
   const virtualTime = data?.reloj_virtual ? new Date(data.reloj_virtual).getTime() : null;
 
+  // Entrega el 100% de los camiones programados y finalizados al Gantt para permitir auditoría histórica retrospectiva
+  const pozosVisibles = useMemo(() => {
+    return data?.pozos || [];
+  }, [data?.pozos]);
+
   const loadData = async () => {
     try {
       const result = await fetchGanttData();
@@ -120,11 +125,6 @@ export const Dashboard = () => {
   if (loading && !data) {
     return <div className="flex h-screen items-center justify-center text-xl font-semibold">Cargando Estado del Patio...</div>;
   }
-
-  // Entrega el 100% de los camiones programados y finalizados al Gantt para permitir auditoría histórica retrospectiva
-  const pozosVisibles = useMemo(() => {
-    return data?.pozos || [];
-  }, [data?.pozos]);
 
   return (
     <div className="flex flex-col h-screen bg-slate-100">
