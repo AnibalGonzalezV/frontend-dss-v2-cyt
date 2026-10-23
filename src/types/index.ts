@@ -38,9 +38,20 @@ export interface Kpis {
   total_dia: number;
 }
 
+export interface PrensaGantt {
+  id: number;
+  nombre: string;
+  nombre_humano?: string;
+  ala: 'ALA_IZQUIERDA' | 'ALA_DERECHA' | string;
+  operativa: boolean;
+  capacidad_kg: number;
+  batches: BatchMaquinaria[];
+}
+
 export interface GanttDataResponse {
   reloj_virtual: string | null;
   pozos: Pozo[];
+  prensas?: PrensaGantt[];
   cola_patio: CamionPatio[];
   kpis?: Kpis;
 }
@@ -197,3 +208,75 @@ export interface DetalleMaquinariaResponse {
   fases?: FasesMaquinaria;
   camiones: CamionMaquinaria[];
 }
+
+export interface FundoAporte {
+  fundo: string;
+  productor: string;
+  variedad: string;
+  grupo_mezcla: string;
+  volumen_litros: number;
+  kilos_uva_origen: number;
+  porcentaje_aporte: number;
+  camiones_count: number;
+  patentes: string[];
+}
+
+export interface CamionContribuyenteCuba {
+  viaje_id: number;
+  patente: string;
+  productor: string;
+  fundo: string;
+  variedad: string;
+  grupo_mezcla: string;
+  estado_viaje: string;
+  es_real: boolean;
+  volumen_aportado_litros: number;
+  kilos_uva_solida: number;
+  hora_flujo: string;
+  pozo_origen?: string | null;
+  prensa_origen?: string | null;
+  cuba_pf_origen?: string | null;
+  flotador_origen?: string | null;
+}
+
+export interface GenealogiaCubaResponse {
+  cuba: {
+    nombre: string;
+    nombre_humano: string;
+    tipo: 'CUBA_PREFLOTACION' | 'CUBA_FERMENTACION';
+    capacidad_litros: number;
+    volumen_real_litros: number;
+    volumen_proyectado_litros: number;
+    volumen_total_litros: number;
+    porcentaje_real: number;
+    porcentaje_proyectado: number;
+    porcentaje_total: number;
+    estado_operativo: 'OPERANDO' | 'RESERVADA' | 'DISPONIBLE';
+    grupo_mezcla_principal: string;
+    variedad_principal: string;
+    pureza_varietal: {
+      es_puro: boolean;
+      porcentaje_pureza: number;
+      grupos_detectados: string[];
+      variedades_detectadas: string[];
+    };
+  };
+  balance_masa: {
+    uva_solida_cosechada_kg: number;
+    mosto_turbio_extraido_litros: number;
+    mosto_clarificado_obtenido_litros: number;
+    merma_orujo_kg: number;
+    merma_borras_litros: number;
+    rendimiento_global_observado: number;
+    rendimiento_teorico_estandar: number;
+  };
+  ruta_fisica: {
+    pozos: string[];
+    prensas: string[];
+    cubas_preflotacion: string[];
+    flotadores: string[];
+  };
+  fundos_procedencia: FundoAporte[];
+  camiones_contribuyentes: CamionContribuyenteCuba[];
+}
+

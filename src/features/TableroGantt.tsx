@@ -1,27 +1,50 @@
 import React, { useMemo, useRef, useEffect, useState } from 'react';
-import { Pozo, BloqueGantt } from '@/types';
-import { getGroupColor } from '@/utils/colors';
-import { fijarAsignacion } from '@/api/ganttService';
+import { Pozo, BloqueGantt, PrensaGantt } from '@/types';
+import { getGroupColor, getGroupBgColor } from '@/utils/colors';
+import { fijarAsignacion, toggleOperatividadPozo } from '@/api/ganttService';
 import { formatearNombreEquipo } from '@/utils/formatters';
+import { ModalDetalleMaquinaria } from './ModalDetalleMaquinaria';
 import toast from 'react-hot-toast';
 
 interface TableroGanttProps {
   pozos: Pozo[];
+  prensas?: PrensaGantt[];
   virtualTime: number | null;
   onUpdate?: () => void;
   onSelectViaje?: (viajeId: number) => void;
+  onSelectCuba?: (cubaNombre: string) => void;
+  onSimulatingChange?: (isSimulating: boolean, msg?: string, successMsg?: string) => void;
+  onPauseAutoPlay?: () => void;
 }
 
 type ZoomMode = 'DETALLE' | 'FIT_24H';
+type GanttViewMode = 'POZOS' | 'PRENSAS';
 
-export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, onUpdate, onSelectViaje }) => {
+export const TableroGantt: React.FC<TableroGanttProps> = ({ 
+  pozos, 
+  prensas, 
+  virtualTime, 
+  onUpdate, 
+  onSelectViaje, 
+  onSelectCuba,
+  onSimulatingChange,
+  onPauseAutoPlay
+}) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   
+  // Selector de Vista: Pozos de Recepción vs Batería de 12 Prensas Neumáticas
+  const [ganttViewMode, setGanttViewMode] = useState<GanttViewMode>('POZOS');
+  const [selectedEquipoModal, setSelectedEquipoModal] = useState<string | null>(null);
+
   // Estado para el Modal de Fijación Manual y Corrección de Desvío en Terreno
   const [selectedAsig, setSelectedAsig] = useState<{asig: BloqueGantt, pozo: Pozo, pozoOriginal: Pozo} | null>(null);
   const [loadingPin, setLoadingPin] = useState(false);
   const [confirmacionFisica, setConfirmacionFisica] = useState<boolean>(false);
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
+
+  // Estado para Modal de Contingencia y Parada de Pozo (Opción A)
+  const [modalContingenciaPozo, setModalContingenciaPozo] = useState<Pozo | null>(null);
+  const [loadingContingencia, setLoadingContingencia] = useState(false);
 
   // Estados de Navegación y Auditoría Histórica (Módulo 8)
   const [zoomMode, setZoomMode] = useState<ZoomMode>('DETALLE');
@@ -29,17 +52,38 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
   const [autoScrollEnabled, setAutoScrollEnabled] = useState<boolean>(true);
   const [containerWidth, setContainerWidth] = useState<number>(1400);
 
-  // Monitoreo de ancho disponible para modo FIT_24H
+  // Respaldo de 12 Prensas Estáticas en caso de retardo en carga
+  const prensasList = useMemo(() => {
+    if (prensas && prensas.length > 0) return prensas;
+    const list: PrensaGantt[] = [];
+    for (let i = 1; i <= 12; i++) {
+      const pad = i < 10 ? `0${i}` : `${i}`;
+      list.push({
+        id: i,
+        nombre: `PR_${pad}`,
+        nombre_humano: `Prensa ${pad}`,
+        ala: i <= 6 ? 'ALA_IZQUIERDA' : 'ALA_DERECHA',
+        operativa: true,
+        capacidad_kg: 80000,
+        batches: []
+      });
+    }
+    return list;
+  }, [prensas]);
+
+  // Monitoreo de ancho disponible para modo FIT_24H mediante ResizeObserver de precisión
   useEffect(() => {
-    if (!scrollContainerRef.current) return;
+    const el = scrollContainerRef.current;
+    if (!el) return;
     const updateWidth = () => {
-      if (scrollContainerRef.current) {
-        setContainerWidth(scrollContainerRef.current.clientWidth);
+      if (el) {
+        setContainerWidth(el.clientWidth);
       }
     };
     updateWidth();
-    window.addEventListener('resize', updateWidth);
-    return () => window.removeEventListener('resize', updateWidth);
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(el);
+    return () => observer.disconnect();
   }, []);
 
   const shiftDay = useMemo(() => {
@@ -63,17 +107,37 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
     };
   }, [shiftDay]);
 
-  // Escala horizontal dinámica (210px en Detalle vs ~65px en Día Completo)
+  // Escala horizontal dinámica (210px en Detalle vs ajuste fluido exacto en Día Completo)
   const hourWidth = useMemo(() => {
     if (zoomMode === 'FIT_24H') {
-      const availableWidth = Math.max(containerWidth - 224, 1380);
-      return Math.floor(availableWidth / hoursToShow);
+      const availableWidth = Math.max(containerWidth - 224, 720);
+      return availableWidth / hoursToShow;
     }
     return 210;
   }, [zoomMode, containerWidth, hoursToShow]);
 
   const totalMinutes = hoursToShow * 60;
   const totalWidth = hoursToShow * hourWidth;
+
+  const handleSetZoomMode = (mode: ZoomMode) => {
+    setZoomMode(mode);
+    if (mode === 'FIT_24H') {
+      setAutoScrollEnabled(false);
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTo({ left: 0, behavior: 'instant' });
+      }
+    } else {
+      setAutoScrollEnabled(true);
+      if (virtualTime && scrollContainerRef.current) {
+        const base = startTime.getTime();
+        const totalMin = hoursToShow * 60;
+        const leftPercent = ((virtualTime - base) / (totalMin * 60 * 1000));
+        const totalWidthPx = hoursToShow * 210;
+        const targetScroll = Math.max(0, leftPercent * totalWidthPx - 380);
+        scrollContainerRef.current.scrollTo({ left: targetScroll, behavior: 'instant' });
+      }
+    }
+  };
 
   // Auto-scroll logic con detección de seguimiento
   useEffect(() => {
@@ -164,70 +228,95 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
     <div className="h-full bg-white flex flex-col font-sans overflow-hidden relative">
       
       {/* Cabecera Superior con Controles de Auditoría Histórica */}
-      <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200 bg-white z-[70] gap-4">
+      <div className="flex justify-between items-center px-4 py-2.5 border-b border-stone-200 bg-white z-[70] gap-4 shrink-0 min-h-[52px]">
         <div className="flex items-center gap-4 flex-wrap">
           <div>
-            <h2 className="text-lg font-extrabold text-slate-800 leading-none">Asignación Operativa</h2>
-            <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold mt-1">Horizonte Predictivo MPC</p>
+            <h2 className="text-base font-black text-stone-900 leading-none">Asignación Operativa</h2>
+          </div>
+
+          {/* Selector de Maquinaria: Pozos vs Batería de Prensas */}
+          <div className="flex bg-stone-100 p-0.5 rounded-lg border border-stone-300 text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setGanttViewMode('POZOS')}
+              className={`px-3 py-1.5 rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${
+                ganttViewMode === 'POZOS' 
+                  ? 'bg-white text-stone-900 shadow-xs font-black ring-1 ring-stone-300' 
+                  : 'text-stone-600 hover:text-stone-900'
+              }`}
+            >
+              Pozos de Descarga ({pozos.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setGanttViewMode('PRENSAS')}
+              className={`px-3 py-1.5 rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${
+                ganttViewMode === 'PRENSAS' 
+                  ? 'bg-white text-stone-900 shadow-xs font-black ring-1 ring-stone-300' 
+                  : 'text-stone-600 hover:text-stone-900'
+              }`}
+            >
+              Batería de Prensas ({prensasList.length})
+            </button>
           </div>
 
           {/* Selector de Modo Zoom y Salto Temporal */}
-          <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
-            <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs font-semibold">
+          <div className="flex items-center gap-2 border-l border-stone-200 pl-3">
+            <div className="flex bg-stone-100 p-0.5 rounded-lg border border-stone-200 text-xs font-semibold">
               <button
                 type="button"
-                onClick={() => {
-                  setZoomMode('DETALLE');
-                  setAutoScrollEnabled(true);
-                }}
+                onClick={() => handleSetZoomMode('DETALLE')}
                 className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                  zoomMode === 'DETALLE' ? 'bg-white text-blue-600 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-800'
+                  zoomMode === 'DETALLE' 
+                    ? 'bg-white text-[#FE6D2C] shadow-xs font-black' 
+                    : 'text-stone-500 hover:text-stone-800 font-medium'
                 }`}
               >
                 Detalle
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setZoomMode('FIT_24H');
-                  setAutoScrollEnabled(false);
-                }}
+                onClick={() => handleSetZoomMode('FIT_24H')}
                 className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                  zoomMode === 'FIT_24H' ? 'bg-white text-blue-600 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-800'
+                  zoomMode === 'FIT_24H' 
+                    ? 'bg-white text-[#FE6D2C] shadow-xs font-black' 
+                    : 'text-stone-500 hover:text-stone-800 font-medium'
                 }`}
               >
                 Día Completo (24h)
               </button>
             </div>
 
-            {zoomMode === 'DETALLE' && (
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={scrollToStart}
-                  title="Ir al inicio de la jornada (08:00)"
-                  className="px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded border border-slate-200 cursor-pointer"
-                >
-                  |&lt; 08:00
-                </button>
-                <button
-                  type="button"
-                  onClick={scrollToNow}
-                  title="Centrar en hora actual y reanudar seguimiento"
-                  className="px-2 py-1 text-xs font-bold text-blue-600 hover:bg-blue-50 bg-blue-50/50 rounded border border-blue-200 cursor-pointer"
-                >
-                  Ahora
-                </button>
-                <button
-                  type="button"
-                  onClick={scrollToEnd}
-                  title="Ir al cierre de jornada (02:00)"
-                  className="px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded border border-slate-200 cursor-pointer"
-                >
-                  02:00 &gt;|
-                </button>
-              </div>
-            )}
+            {/* Navegación temporal rápida (mantiene ancho reservado para eliminar reajuste de layout) */}
+            <div className={`flex items-center gap-1 transition-opacity ${zoomMode === 'DETALLE' ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+              <button
+                type="button"
+                onClick={scrollToStart}
+                disabled={zoomMode !== 'DETALLE'}
+                title="Ir al inicio de la jornada (08:00)"
+                className="px-2 py-1 text-xs font-semibold text-stone-600 hover:bg-stone-100 rounded border border-stone-200 cursor-pointer"
+              >
+                |&lt; 08:00
+              </button>
+              <button
+                type="button"
+                onClick={scrollToNow}
+                disabled={zoomMode !== 'DETALLE'}
+                title="Centrar en hora actual y reanudar seguimiento"
+                className="px-2 py-1 text-xs font-bold text-[#FE6D2C] hover:bg-orange-50 bg-orange-50/50 rounded border border-orange-200 cursor-pointer"
+              >
+                Ahora
+              </button>
+              <button
+                type="button"
+                onClick={scrollToEnd}
+                disabled={zoomMode !== 'DETALLE'}
+                title="Ir al cierre de jornada (02:00)"
+                className="px-2 py-1 text-xs font-semibold text-stone-600 hover:bg-stone-100 rounded border border-stone-200 cursor-pointer"
+              >
+                02:00 &gt;|
+              </button>
+            </div>
 
             <button
               type="button"
@@ -235,7 +324,7 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
               title="Alternar atenuación en escala de grises para camiones finalizados"
               className={`px-2 py-1 text-xs font-semibold rounded border transition-colors cursor-pointer ${
                 atenuarPasado
-                  ? 'bg-slate-200 text-slate-700 border-slate-300'
+                  ? 'bg-stone-200 text-stone-700 border-stone-300'
                   : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
               }`}
             >
@@ -244,48 +333,130 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
           </div>
         </div>
 
-        {/* Leyenda de Grupos Enológicos */}
-        <div className="flex flex-wrap gap-2 text-[10px] font-bold text-slate-500 max-w-lg justify-end">
-           <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-emerald-500 rounded-xs"></div> G-1</div>
-           <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-teal-500 rounded-xs"></div> G-2</div>
-           <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-cyan-500 rounded-xs"></div> G-3</div>
-           <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-sky-500 rounded-xs"></div> G-4</div>
-           <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-blue-500 rounded-xs"></div> G-5</div>
-           <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-indigo-500 rounded-xs"></div> G-6</div>
-           <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-violet-500 rounded-xs"></div> G-7</div>
-           <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-purple-500 rounded-xs"></div> G-8</div>
-           <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-fuchsia-500 rounded-xs"></div> G-9</div>
-           <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-rose-500 rounded-xs"></div> G-10</div>
-           <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-amber-500 rounded-xs"></div> G-11</div>
-           <div className="flex items-center gap-1 ml-1"><div className="w-2.5 h-2.5 bg-slate-500 rounded-xs"></div> GEN</div>
+        {/* Leyenda Dinámica de Grupos Enológicos */}
+        <div className="flex flex-wrap gap-2 text-[10px] font-bold text-slate-500 max-w-xl justify-end items-center">
+          {Array.from({ length: 11 }, (_, i) => i + 1).map((num) => (
+            <div key={`legend-g-${num}`} className="flex items-center gap-1">
+              <div className={`w-2.5 h-2.5 rounded-xs ${getGroupBgColor(`GRUPO-${num}`)}`}></div>
+              <span>G-{num}</span>
+            </div>
+          ))}
+          <div className="flex items-center gap-1 ml-1">
+            <div className={`w-2.5 h-2.5 rounded-xs ${getGroupBgColor('GENERICO')}`}></div>
+            <span>GEN</span>
+          </div>
         </div>
       </div>
 
       <div 
         ref={scrollContainerRef} 
         onScroll={handleContainerScroll}
-        className="flex-1 overflow-auto flex relative bg-slate-50 scroll-smooth"
+        className={`flex-1 flex relative bg-stone-50 ${zoomMode === 'FIT_24H' ? 'overflow-y-auto overflow-x-hidden' : 'overflow-auto'}`}
       >
         
         {/* COLUMNA IZQUIERDA (STICKY) */}
         <div className="w-56 flex-shrink-0 bg-white border-r border-gray-300 sticky left-0 z-[60] flex flex-col shadow-[4px_0_15px_-3px_rgba(0,0,0,0.1)]">
-          <div className="h-12 border-b border-gray-300 flex items-center px-4 font-bold text-slate-500 bg-slate-100 text-sm z-[70] relative">
-            MAQUINARIA
+          <div 
+            className="h-12 border-b border-gray-200 flex items-center justify-between px-4 font-bold text-slate-600 bg-slate-100 text-xs sticky top-0 z-[70] tracking-wider shrink-0 box-border"
+            style={{ height: '48px', minHeight: '48px', maxHeight: '48px' }}
+          >
+            <span>{ganttViewMode === 'POZOS' ? 'POZOS DE DESCARGA' : 'BATERÍA DE PRENSAS'}</span>
+            <span className="font-mono text-[10px] text-slate-400">
+              {ganttViewMode === 'POZOS' ? `${pozos.length} tolvas` : `${prensasList.length} máqs`}
+            </span>
           </div>
-          {pozos.map(pozo => (
-            <div key={pozo.id} className="h-32 border-b border-gray-200 flex flex-col justify-center px-5 relative bg-white group transition-colors hover:bg-slate-50 hover:z-50">
-               <div className="font-extrabold text-lg text-slate-800">{formatearNombreEquipo(pozo.nombre)}</div>
-               <div className="text-xs text-slate-400 font-medium">Capacidad: 50 ton/h</div>
-            </div>
-          ))}
+
+          {ganttViewMode === 'POZOS' ? (
+            pozos.map(pozo => (
+              <div 
+                key={pozo.id} 
+                className="h-32 shrink-0 border-b border-gray-200 flex flex-col justify-center px-4 relative bg-white group transition-colors hover:bg-slate-50 hover:z-50 box-border"
+                style={{ height: '128px', minHeight: '128px', maxHeight: '128px' }}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="font-extrabold text-base text-slate-800">{formatearNombreEquipo(pozo.nombre)}</div>
+                  <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider ${
+                    pozo.operativa 
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-300' 
+                      : 'bg-red-100 text-red-900 border-red-300 animate-pulse'
+                  }`}>
+                    {pozo.operativa ? 'Operativo' : 'En Falla'}
+                  </span>
+                </div>
+                <div className="text-xs text-stone-500 font-semibold mt-0.5">Capacidad: 50 ton/h</div>
+
+                {/* Botón de Control de Contingencia */}
+                <div className="mt-2.5">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onPauseAutoPlay?.();
+                      setModalContingenciaPozo(pozo);
+                    }}
+                    className={`w-full py-1 px-2 rounded-md text-[10px] font-bold tracking-wider uppercase transition-all shadow-2xs cursor-pointer border ${
+                      pozo.operativa
+                        ? 'bg-amber-50 hover:bg-red-50 text-amber-800 hover:text-red-700 border-amber-200 hover:border-red-300'
+                        : 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700'
+                    }`}
+                  >
+                    {pozo.operativa ? 'Declarar Parada' : 'Reactivar Tolva'}
+                  </button>
+                </div>
+              </div>
+            ))
+          ) : (
+            prensasList.map((pr, idx) => {
+              const esAlaIzquierda = pr.ala === 'ALA_IZQUIERDA' || idx < 6;
+              return (
+                <div 
+                  key={pr.id || pr.nombre} 
+                  onClick={() => setSelectedEquipoModal(pr.nombre)}
+                  className="h-16 shrink-0 border-b border-gray-200 flex flex-col justify-center px-4 relative bg-white group transition-colors hover:bg-blue-50/50 cursor-pointer box-border"
+                  style={{ height: '64px', minHeight: '64px', maxHeight: '64px' }}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="font-extrabold text-xs text-slate-900 group-hover:text-blue-600 transition-colors">
+                      {pr.nombre_humano || formatearNombreEquipo(pr.nombre)}
+                    </div>
+                    <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border ${
+                      esAlaIzquierda 
+                        ? 'bg-blue-50 text-blue-900 border-blue-200' 
+                        : 'bg-indigo-50 text-indigo-900 border-indigo-200'
+                    }`}>
+                      {esAlaIzquierda ? 'Ala Izq' : 'Ala Der'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-stone-500 font-semibold mt-0.5">
+                    <span>80 Ton / 2.5h</span>
+                    <span className="font-mono text-[10px] text-slate-400">
+                      {pr.batches && pr.batches.length > 0 
+                        ? `${pr.batches.length} ${pr.batches.length === 1 ? 'batch' : 'batches'}` 
+                        : 'Disponible'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
 
         {/* ÁREA DE LÍNEA TEMPORAL */}
-        <div className="flex flex-col relative" style={{ minWidth: `${totalWidth}px` }}>
+        <div 
+          className={`flex flex-col relative ${zoomMode === 'FIT_24H' ? 'w-[calc(100%-14rem)] flex-1' : ''}`} 
+          style={{ minWidth: zoomMode === 'FIT_24H' ? '0px' : `${totalWidth}px` }}
+        >
           
-          <div className="h-12 border-b border-gray-200 flex bg-white sticky top-0 z-[55]">
+          <div 
+            className="h-12 border-b border-gray-200 flex bg-white sticky top-0 z-[55] shrink-0 box-border"
+            style={{ height: '48px', minHeight: '48px', maxHeight: '48px' }}
+          >
             {hourLabels.map((label, i) => (
-              <div key={i} className="border-l border-gray-200 px-2 py-3 text-sm font-bold text-slate-500 text-center" style={{ width: `${hourWidth}px` }}>
+              <div 
+                key={i} 
+                className="border-l border-gray-200 px-2 flex items-center justify-center h-full text-xs font-bold text-slate-500 text-center box-border" 
+                style={{ width: `${hourWidth}px` }}
+              >
                 {label}
               </div>
             ))}
@@ -318,117 +489,251 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
               </div>
             )}
 
-            {/* Bloques de Asignación por Pozo */}
-            {pozos.map((pozo, rowIndex) => (
-              <div key={pozo.id} className="h-32 border-b border-gray-100 relative group/row hover:bg-slate-200/30 transition-colors z-10 hover:z-50">
-                {pozo.asignaciones.map(asig => {
-                   const style = getBlockStyle(asig.hora_inicio, asig.hora_fin);
-                   const colorClass = getGroupColor(asig.grupo);
-                   
-                   if (parseFloat(style.left) > 100 || parseFloat(style.left) + parseFloat(style.width) < 0) return null;
+            {/* Bloques de Asignación por Pozo o Batches de Prensa */}
+            {ganttViewMode === 'POZOS' ? (
+              pozos.map((pozo, rowIndex) => (
+                <div 
+                  key={pozo.id} 
+                  className={`h-32 shrink-0 border-b border-gray-200 relative group/row transition-colors z-10 hover:z-50 box-border ${
+                    pozo.operativa ? 'hover:bg-slate-200/30' : 'bg-red-50/20'
+                  }`}
+                  style={{ height: '128px', minHeight: '128px', maxHeight: '128px' }}
+                >
+                  {pozo.asignaciones.map(asig => {
+                     const style = getBlockStyle(asig.hora_inicio, asig.hora_fin);
+                     const colorClass = getGroupColor(asig.grupo);
+                     
+                     if (parseFloat(style.left) > 100 || parseFloat(style.left) + parseFloat(style.width) < 0) return null;
 
-                   const endT = new Date(asig.hora_fin).getTime();
-                   const isPast = virtualTime && endT <= virtualTime;
-                   let visualStateClass = 'opacity-100 hover:-translate-y-1 hover:shadow-xl';
-                      
-                   const isTransito = asig.estado === 'TRANSITO';
-                   const isFirmAI = !asig.override_manual && (asig.estado === 'PATIO' || asig.estado === 'ROMANA');
-                      
-                   if (isTransito) {
-                     // Camiones GPS tentativos
-                     visualStateClass = 'opacity-85 border-2 border-dashed border-white/60 hover:opacity-100 hover:-translate-y-1 hover:shadow-xl bg-[linear-gradient(45deg,rgba(255,255,255,0.1)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.1)_50%,rgba(255,255,255,0.1)_75%,transparent_75%,transparent)] bg-[length:10px_10px]';
-                   } else if (isPast && atenuarPasado) {
-                     visualStateClass = 'opacity-40 grayscale hover:grayscale-0 hover:opacity-100';
-                   } else if (isPast && !atenuarPasado) {
-                     // Modo auditoría nítido: colores vivos con distinción de finalizado
-                     visualStateClass = 'opacity-95 hover:-translate-y-1 hover:shadow-xl border-l-4 border-l-slate-900/60 shadow-xs';
-                   } else if (isFirmAI) {
-                     visualStateClass = 'opacity-100 hover:-translate-y-1 hover:shadow-xl border border-white/20';
-                   }
+                     const endT = new Date(asig.hora_fin).getTime();
+                     const isPast = virtualTime && endT <= virtualTime;
+                     let visualStateClass = 'opacity-100 hover:-translate-y-1 hover:shadow-xl';
+                        
+                     const isTransito = asig.estado === 'TRANSITO';
+                     const isFirmAI = !asig.override_manual && (asig.estado === 'PATIO' || asig.estado === 'ROMANA');
+                        
+                     if (isTransito) {
+                       // Camiones GPS tentativos
+                       visualStateClass = 'opacity-85 border-2 border-dashed border-white/60 hover:opacity-100 hover:-translate-y-1 hover:shadow-xl bg-[linear-gradient(45deg,rgba(255,255,255,0.1)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.1)_50%,rgba(255,255,255,0.1)_75%,transparent_75%,transparent)] bg-[length:10px_10px]';
+                     } else if (isPast && atenuarPasado) {
+                       visualStateClass = 'opacity-40 grayscale hover:grayscale-0 hover:opacity-100';
+                     } else if (isPast && !atenuarPasado) {
+                       // Modo auditoría nítido: colores vivos con distinción de finalizado
+                       visualStateClass = 'opacity-95 hover:-translate-y-1 hover:shadow-xl border-l-4 border-l-slate-900/60 shadow-xs';
+                     } else if (isFirmAI) {
+                       visualStateClass = 'opacity-100 hover:-translate-y-1 hover:shadow-xl border border-white/20';
+                     }
 
-                   const tooltipPos = rowIndex <= 1 ? 'top-full mt-2' : 'bottom-full mb-2';
-                   const tooltipTriangle = rowIndex <= 1 ? 'bottom-full border-b-slate-900' : 'top-full border-t-slate-900';
+                     const tooltipPos = rowIndex <= 1 ? 'top-full mt-2' : 'bottom-full mb-2';
+                     const tooltipTriangle = rowIndex <= 1 ? 'bottom-full border-b-slate-900' : 'top-full border-t-slate-900';
 
-                   return (
-                     <div 
-                       key={asig.id}
-                       style={style}
-                       onClick={() => {
-                         onSelectViaje?.(asig.viaje_id);
-                       }}
-                       className={`absolute top-4 bottom-4 rounded-lg ${colorClass} ${visualStateClass} group flex flex-col justify-center cursor-pointer transition-all z-10 hover:z-[65] ${asig.estado !== 'TRANSITO' ? 'border border-white/20' : ''}`}
-                     >
-                       {/* Botón de Ajuste Manual (en FIT_24H visible solo al hover para no tapar texto) */}
-                       {(asig.estado === 'PATIO' || asig.estado === 'ROMANA' || asig.estado === 'DESCARGANDO') && (
-                         <button
-                           type="button"
-                           onClick={(e) => {
-                             e.stopPropagation();
-                             setSelectedAsig({asig, pozo, pozoOriginal: pozo}); setConfirmacionFisica(false); setShowConfirmModal(false);
-                           }}
-                           title="Reasignar pozo / Fijar asignación manual"
-                           className={`absolute top-1 right-1 text-[9px] font-bold bg-slate-900/80 hover:bg-blue-600 text-white rounded px-1.5 py-0.5 shadow-xs flex items-center justify-center transition-colors z-20 cursor-pointer ${
-                             zoomMode === 'FIT_24H' ? 'hidden group-hover:flex' : ''
-                           }`}
-                         >
-                           {asig.override_manual ? 'F' : 'Ajustar'}
-                         </button>
-                       )}
-
-                       {/* Contenedor de texto con ajuste responsivo a zoom */}
-                       <div className="flex flex-col px-1.5 overflow-hidden w-full items-center text-center leading-tight">
-                         <div className={`font-extrabold tracking-tight whitespace-nowrap text-ellipsis overflow-hidden w-full ${zoomMode === 'FIT_24H' ? 'text-[11px]' : 'text-sm'}`}>
-                           {asig.patente}
-                         </div>
-                         {zoomMode !== 'FIT_24H' && (
-                           <div className="text-[10px] font-medium opacity-90 whitespace-nowrap text-ellipsis overflow-hidden w-full">
-                             {asig.grupo}
-                           </div>
+                     return (
+                       <div 
+                         key={asig.id}
+                         style={style}
+                         onClick={() => {
+                           onSelectViaje?.(asig.viaje_id);
+                         }}
+                         className={`absolute top-4 bottom-4 rounded-lg ${colorClass} ${visualStateClass} group flex flex-col justify-center cursor-pointer transition-all z-10 hover:z-[65] ${asig.estado !== 'TRANSITO' ? 'border border-white/20' : ''}`}
+                       >
+                         {/* Botón de Ajuste Manual (en FIT_24H visible solo al hover para no tapar texto) */}
+                         {(asig.estado === 'PATIO' || asig.estado === 'ROMANA' || asig.estado === 'DESCARGANDO') && (
+                           <button
+                             type="button"
+                             onClick={(e) => {
+                               e.stopPropagation();
+                               onPauseAutoPlay?.();
+                               setSelectedAsig({asig, pozo, pozoOriginal: pozo}); setConfirmacionFisica(false); setShowConfirmModal(false);
+                             }}
+                             title="Reasignar pozo / Fijar asignación manual"
+                             className={`absolute top-1 right-1 text-[9px] font-bold bg-slate-900/80 hover:bg-blue-600 text-white rounded px-1.5 py-0.5 shadow-xs flex items-center justify-center transition-colors z-20 cursor-pointer ${
+                               zoomMode === 'FIT_24H' ? 'hidden group-hover:flex' : ''
+                             }`}
+                           >
+                             {asig.override_manual ? 'F' : 'Ajustar'}
+                           </button>
                          )}
-                       </div>
 
-                       {/* Tooltip de Auditoría */}
-                       <div className={`absolute left-1/2 -translate-x-1/2 ${tooltipPos} hidden group-hover:block w-56 bg-slate-900 text-white text-xs rounded-xl p-4 shadow-2xl z-[75] pointer-events-none`}>
-                          <div className="flex justify-center mb-3">
-                            {asig.estado === 'FINALIZADO' ? (
-                                <span className="bg-slate-700/60 text-emerald-400 border border-emerald-500/40 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider">DESCARGA FINALIZADA</span>
-                            ) : asig.estado === 'DESCARGANDO' ? (
-                                <span className="bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider">OPERACIÓN ACTIVA</span>
-                            ) : asig.estado === 'TRANSITO' ? (
-                                <span className="bg-slate-700/50 text-slate-300 border border-slate-600 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider">PLAN TENTATIVO (GPS)</span>
-                            ) : asig.override_manual ? (
-                                <span className="bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider">ASIGNACIÓN FIJA</span>
-                            ) : (
-                                <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider">PLAN FIRME (IA)</span>
+                         {/* Contenedor de texto con ajuste responsivo a zoom */}
+                         <div className="flex flex-col px-1.5 overflow-hidden w-full items-center text-center leading-tight">
+                           <div className={`font-extrabold tracking-tight whitespace-nowrap text-ellipsis overflow-hidden w-full ${zoomMode === 'FIT_24H' ? 'text-[11px]' : 'text-sm'}`}>
+                             {asig.patente}
+                           </div>
+                           {zoomMode !== 'FIT_24H' && (
+                             <div className="text-[10px] font-medium opacity-90 whitespace-nowrap text-ellipsis overflow-hidden w-full">
+                               {asig.grupo}
+                             </div>
+                           )}
+                         </div>
+
+                         {/* Tooltip de Auditoría */}
+                         <div className={`absolute left-1/2 -translate-x-1/2 ${tooltipPos} hidden group-hover:block w-56 bg-slate-900 text-white text-xs rounded-xl p-4 shadow-2xl z-[75] pointer-events-none`}>
+                            <div className="flex justify-center mb-3">
+                              {asig.estado === 'FINALIZADO' ? (
+                                  <span className="bg-slate-700/60 text-emerald-400 border border-emerald-500/40 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider">DESCARGA FINALIZADA</span>
+                              ) : asig.estado === 'DESCARGANDO' ? (
+                                  <span className="bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider">OPERACIÓN ACTIVA</span>
+                              ) : asig.estado === 'TRANSITO' ? (
+                                  <span className="bg-slate-700/50 text-slate-300 border border-slate-600 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider">PLAN TENTATIVO (GPS)</span>
+                              ) : asig.override_manual ? (
+                                  <span className="bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider">ASIGNACIÓN FIJA</span>
+                              ) : (
+                                  <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider">PLAN FIRME (IA)</span>
+                              )}
+                            </div>
+                            
+                            <div className="font-bold text-base mb-2 border-b border-slate-700 pb-2 text-center text-blue-100">
+                              {asig.patente} <span className="text-[10px] ml-2 text-slate-400 bg-slate-800 px-2 py-0.5 rounded">{asig.estado}</span>
+                            </div>
+                            <div className="space-y-1.5">
+                              <div className="flex justify-between"><span className="text-slate-400">Grupo:</span> <span className="font-bold">{asig.grupo}</span></div>
+                              <div className="flex justify-between"><span className="text-slate-400">Peso:</span> <span className="font-bold">{(asig.peso_kg / 1000).toFixed(1)} Ton</span></div>
+                              <div className="flex justify-between"><span className="text-slate-400">Espera:</span> <span className={`font-bold ${asig.espera_hrs > 1.5 ? 'text-red-400' : 'text-emerald-400'}`}>{asig.espera_hrs.toFixed(1)} hrs</span></div>
+                            </div>
+                            
+                            <div className="mt-3 pt-2 border-t border-slate-700 flex justify-between text-slate-300 font-mono text-center">
+                              <span className="bg-slate-800 px-2 py-1 rounded">{new Date(asig.hora_inicio).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                              <span className="self-center text-slate-500">&gt;</span>
+                              <span className="bg-slate-800 px-2 py-1 rounded">{new Date(asig.hora_fin).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                            </div>
+                            
+                            <div className="mt-2 text-center text-[10px] text-blue-300 font-medium">
+                              Clic para auditar trazabilidad
+                            </div>
+
+                            <div className={`absolute ${tooltipTriangle} left-1/2 -translate-x-1/2 border-8 border-transparent`}></div>
+                         </div>
+                       </div>
+                     );
+                  })}
+
+                  {/* Overlay de Contingencia / Fuera de Servicio */}
+                  {!pozo.operativa && (
+                    <div className="absolute inset-0 bg-red-950/10 backdrop-grayscale-[0.4] z-20 pointer-events-none flex items-center justify-center border-y border-red-500/20 bg-[repeating-linear-gradient(45deg,rgba(239,68,68,0.06),rgba(239,68,68,0.06)_12px,transparent_12px,transparent_24px)]">
+                      <div className="bg-red-600/90 text-white text-xs font-black px-3.5 py-1.5 rounded-lg shadow-lg uppercase tracking-wider flex items-center gap-2 border border-red-400">
+                        <span className="w-2 h-2 rounded-full bg-white animate-ping"></span>
+                        <span>Tolva Fuera de Servicio · Tráfico Reenrutado</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))
+            ) : (
+              prensasList.map((pr, rowIndex) => (
+                <div 
+                  key={pr.id || pr.nombre} 
+                  className="h-16 shrink-0 border-b border-gray-200 relative group/row hover:bg-blue-50/20 transition-colors z-10 hover:z-50 box-border"
+                  style={{ height: '64px', minHeight: '64px', maxHeight: '64px' }}
+                >
+                  {pr.batches && pr.batches.map((batch) => {
+                    const style = getBlockStyle(batch.hora_inicio, batch.hora_fin_estimada);
+                    const colorClass = getGroupColor(batch.grupo_mezcla);
+
+                    if (parseFloat(style.left) > 100 || parseFloat(style.left) + parseFloat(style.width) < 0) return null;
+
+                    const endT = new Date(batch.hora_fin_estimada).getTime();
+                    const startT = new Date(batch.hora_inicio).getTime();
+                    const isPast = virtualTime && endT <= virtualTime;
+                    const isCurrent = virtualTime && startT <= virtualTime && virtualTime < endT;
+
+                    let visualClass = 'opacity-100 border border-white/30 hover:-translate-y-0.5 hover:shadow-lg';
+                    if (batch.estado_batch === 'EN_CURSO' || isCurrent) {
+                      visualClass = 'opacity-100 border-2 border-white ring-2 ring-blue-500 shadow-md animate-pulse';
+                    } else if (batch.estado_batch === 'FINALIZADO' || isPast) {
+                      visualClass = atenuarPasado ? 'opacity-40 grayscale hover:grayscale-0 hover:opacity-100' : 'opacity-95 border border-white/20 shadow-xs';
+                    } else {
+                      visualClass = 'opacity-85 border border-dashed border-white/60 bg-[linear-gradient(45deg,rgba(255,255,255,0.1)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.1)_50%,rgba(255,255,255,0.1)_75%,transparent_75%,transparent)] bg-[length:8px_8px]';
+                    }
+
+                    const tooltipPos = rowIndex <= 3 ? 'top-full mt-2' : 'bottom-full mb-2';
+
+                    return (
+                      <div
+                        key={`${pr.nombre}-batch-${batch.numero_batch}-${batch.hora_inicio}`}
+                        style={style}
+                        onClick={() => setSelectedEquipoModal(pr.nombre)}
+                        className={`absolute top-1.5 bottom-1.5 rounded-lg ${colorClass} ${visualClass} group flex flex-col justify-center cursor-pointer transition-all z-10 hover:z-[65] px-2 shadow-sm`}
+                      >
+                        {/* Batch label and tonnage */}
+                        <div className="flex flex-col overflow-hidden w-full items-center text-center leading-tight">
+                          <div className="font-extrabold tracking-tight whitespace-nowrap text-ellipsis overflow-hidden w-full text-xs text-white drop-shadow-xs">
+                            Batch #{batch.numero_batch} · {batch.grupo_mezcla}
+                          </div>
+                          <div className="text-[10px] font-mono font-bold opacity-95 text-white whitespace-nowrap text-ellipsis overflow-hidden w-full">
+                            {(batch.volumen_kg / 1000).toFixed(1)} Ton ({batch.porcentaje_ocupacion.toFixed(0)}%)
+                          </div>
+                          {zoomMode !== 'FIT_24H' && (
+                            <div className="text-[9px] font-medium opacity-90 text-white whitespace-nowrap">
+                              {batch.camiones.length} {batch.camiones.length === 1 ? 'camión' : 'camiones'}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Tooltip de Detalle Batch */}
+                        <div className={`absolute left-1/2 -translate-x-1/2 ${tooltipPos} hidden group-hover:block w-64 bg-slate-900 text-white text-xs rounded-xl p-4 shadow-2xl z-[75] pointer-events-none`}>
+                          <div className="flex justify-between items-center mb-2 pb-2 border-b border-slate-700">
+                            <span className="font-extrabold text-sm text-white">
+                              {pr.nombre_humano || formatearNombreEquipo(pr.nombre)}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              batch.estado_batch === 'EN_CURSO'
+                                ? 'bg-blue-500/30 text-blue-300 border border-blue-400'
+                                : batch.estado_batch === 'FINALIZADO'
+                                ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-400'
+                                : 'bg-slate-700 text-slate-300 border border-slate-600'
+                            }`}>
+                              Batch #{batch.numero_batch} ({batch.estado_batch})
+                            </span>
+                          </div>
+
+                          <div className="space-y-1.5 font-mono text-[11px] text-slate-300">
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">Variedad/Grupo:</span>
+                              <strong className="text-white">{batch.grupo_mezcla}</strong>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">Carga Total:</span>
+                              <strong className="text-white">{batch.volumen_kg.toLocaleString('es-CL')} kg / 80k kg</strong>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">Ocupación:</span>
+                              <strong className="text-white">{batch.porcentaje_ocupacion.toFixed(1)} %</strong>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">Ciclo Prensado:</span>
+                              <span className="text-cyan-300">
+                                {new Date(batch.hora_inicio).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})} - {new Date(batch.hora_fin_estimada).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">Aporte Camiones:</span>
+                              <span className="text-white">{batch.camiones.length} viajes</span>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 pt-2 border-t border-slate-700 flex flex-wrap gap-1">
+                            {batch.camiones.slice(0, 4).map((c, ci) => (
+                              <span key={ci} className="text-[9px] font-mono bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded border border-slate-700">
+                                {c.patente} ({(c.volumen_etapa / 1000).toFixed(1)}t)
+                              </span>
+                            ))}
+                            {batch.camiones.length > 4 && (
+                              <span className="text-[9px] font-mono text-slate-400 self-center">
+                                +{batch.camiones.length - 4} más
+                              </span>
                             )}
                           </div>
-                          
-                          <div className="font-bold text-base mb-2 border-b border-slate-700 pb-2 text-center text-blue-100">
-                            {asig.patente} <span className="text-[10px] ml-2 text-slate-400 bg-slate-800 px-2 py-0.5 rounded">{asig.estado}</span>
-                          </div>
-                          <div className="space-y-1.5">
-                            <div className="flex justify-between"><span className="text-slate-400">Grupo:</span> <span className="font-bold">{asig.grupo}</span></div>
-                            <div className="flex justify-between"><span className="text-slate-400">Peso:</span> <span className="font-bold">{(asig.peso_kg / 1000).toFixed(1)} Ton</span></div>
-                            <div className="flex justify-between"><span className="text-slate-400">Espera:</span> <span className={`font-bold ${asig.espera_hrs > 1.5 ? 'text-red-400' : 'text-emerald-400'}`}>{asig.espera_hrs.toFixed(1)} hrs</span></div>
-                          </div>
-                          
-                          <div className="mt-3 pt-2 border-t border-slate-700 flex justify-between text-slate-300 font-mono text-center">
-                            <span className="bg-slate-800 px-2 py-1 rounded">{new Date(asig.hora_inicio).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                            <span className="self-center text-slate-500">&gt;</span>
-                            <span className="bg-slate-800 px-2 py-1 rounded">{new Date(asig.hora_fin).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                          </div>
-                          
-                          <div className="mt-2 text-center text-[10px] text-blue-300 font-medium">
-                            Clic para auditar trazabilidad
-                          </div>
 
-                          <div className={`absolute ${tooltipTriangle} left-1/2 -translate-x-1/2 border-8 border-transparent`}></div>
-                       </div>
-                     </div>
-                   );
-                })}
-              </div>
-            ))}
+                          <div className="mt-2 text-[10px] text-blue-300 font-semibold text-center">
+                            Clic para abrir ficha técnica completa
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
@@ -735,6 +1040,114 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({ pozos, virtualTime, 
           </>
         );
       })()}
+
+      {/* Modal de Detalle de Maquinaria (Prensas) */}
+      <ModalDetalleMaquinaria
+        nombreEquipo={selectedEquipoModal}
+        isOpen={!!selectedEquipoModal}
+        onClose={() => setSelectedEquipoModal(null)}
+        onSelectViaje={onSelectViaje}
+      />
+
+      {/* Modal de Contingencia y Parada Operativa de Pozo (Opción A) */}
+      {modalContingenciaPozo && (
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center z-[115] p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                modalContingenciaPozo.operativa 
+                  ? 'bg-amber-100 text-amber-700 border border-amber-300' 
+                  : 'bg-emerald-100 text-emerald-700 border border-emerald-300'
+              }`}>
+                {modalContingenciaPozo.operativa ? (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">
+                  {modalContingenciaPozo.operativa ? 'Declarar Parada Imprevista' : 'Reactivar Tolva de Recepción'}
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  Control de Contingencia en Planta · {formatearNombreEquipo(modalContingenciaPozo.nombre)}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs text-slate-700 mb-5 leading-relaxed">
+              {modalContingenciaPozo.operativa ? (
+                <p>
+                  ¿Confirmar la parada imprevista de <strong className="text-slate-900">{formatearNombreEquipo(modalContingenciaPozo.nombre)}</strong>? 
+                  El optimizador matemático HiGHS excluirá esta tolva del balance y <strong>Celery redistribuirá de inmediato</strong> los camiones en cola hacia las tolvas operativas.
+                </p>
+              ) : (
+                <p>
+                  ¿Confirmar la reactivación de <strong className="text-slate-900">{formatearNombreEquipo(modalContingenciaPozo.nombre)}</strong>? 
+                  La tolva volverá a estar disponible para recibir descargas y el modelo equilibrará la asignación de patio.
+                </p>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2.5">
+              <button
+                type="button"
+                disabled={loadingContingencia}
+                onClick={() => setModalContingenciaPozo(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={loadingContingencia}
+                onClick={async () => {
+                  try {
+                    setLoadingContingencia(true);
+                    const esParada = modalContingenciaPozo.operativa;
+                    const nombreEq = formatearNombreEquipo(modalContingenciaPozo.nombre);
+                    if (onSimulatingChange) {
+                      onSimulatingChange(
+                        true,
+                        esParada
+                          ? `Contingencia en Planta: Replanificando patio por parada en ${nombreEq}...`
+                          : `Reactivando ${nombreEq} y recalculando balance de patio...`,
+                        esParada
+                          ? `Tolva fuera de servicio. Tráfico reenrutado con éxito.`
+                          : `Tolva reactivada y reincorporada a la recepción.`
+                      );
+                    }
+                    await toggleOperatividadPozo(modalContingenciaPozo.id);
+                    setModalContingenciaPozo(null);
+                    toast.success(
+                      esParada
+                        ? `${nombreEq} fuera de servicio. Tráfico redistribuido.`
+                        : `${nombreEq} reactivado con éxito.`
+                    );
+                    if (onUpdate) onUpdate();
+                  } catch (err: any) {
+                    toast.error(err.message || 'Error al cambiar estado de tolva');
+                  } finally {
+                    setLoadingContingencia(false);
+                    if (onSimulatingChange) onSimulatingChange(false);
+                  }
+                }}
+                className={`px-4 py-2 text-xs font-extrabold text-white rounded-lg transition-all shadow-md cursor-pointer ${
+                  modalContingenciaPozo.operativa
+                    ? 'bg-red-600 hover:bg-red-700 shadow-red-600/30'
+                    : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/30'
+                }`}
+              >
+                {loadingContingencia ? 'Procesando en Celery...' : modalContingenciaPozo.operativa ? 'Confirmar Parada' : 'Confirmar Reactivación'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

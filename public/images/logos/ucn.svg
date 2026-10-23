@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 40" fill="none">
+  <!-- UCN Logo (Universidad Católica del Norte) -->
+  <g id="ucn-shield">
+    <path d="M4 6 C4 6 18 3 18 3 C18 3 32 6 32 6 C32 20 28 31 18 37 C8 31 4 20 4 6 Z" fill="#002B7F" stroke="#E5A823" stroke-width="1.5"/>
+    <!-- Yellow Cross -->
+    <path d="M18 10 L18 28 M12 16 L24 16" stroke="#E5A823" stroke-width="2.2" stroke-linecap="square"/>
+    <!-- Stars / Accents -->
+    <circle cx="12" cy="11" r="1.2" fill="#FFFFFF"/>
+    <circle cx="24" cy="11" r="1.2" fill="#FFFFFF"/>
+    <circle cx="18" cy="31" r="1.2" fill="#FFFFFF"/>
+  </g>
+  <g id="ucn-text">
+    <text x="39" y="19" font-family="'Montserrat', 'Arial Black', Arial, sans-serif" font-size="14" font-weight="900" letter-spacing="1" fill="#002B7F">
+      UCN
+    </text>
+    <text x="39" y="30" font-family="'Arial', sans-serif" font-size="7" font-weight="700" letter-spacing="0.5" fill="#475569">
+      UNIVERSIDAD CATÓLICA
+    </text>
+    <text x="39" y="37" font-family="'Arial', sans-serif" font-size="7" font-weight="700" letter-spacing="0.5" fill="#475569">
+      DEL NORTE
+    </text>
+  </g>
+</svg>

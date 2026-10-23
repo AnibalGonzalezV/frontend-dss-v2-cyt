@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 48" fill="none">
+  <!-- Viña Concha y Toro Corporate Wordmark -->
+  <g id="brand-emblem">
+    <!-- Emblem Shield / Seal with Copper and Orange Accents -->
+    <rect x="2" y="4" width="38" height="40" rx="8" fill="#18181B" stroke="#CF5128" stroke-width="1.5"/>
+    <path d="M21 9 L32 15 L32 27 C32 35 21 40 21 40 C21 40 10 35 10 27 L10 15 Z" fill="#27272A" stroke="#FE6D2C" stroke-width="1.2"/>
+    <!-- Grape Cluster / Monogram Motif inside Shield -->
+    <circle cx="21" cy="21" r="2.8" fill="#FE6D2C" />
+    <circle cx="17.5" cy="25" r="2.5" fill="#CF5128" />
+    <circle cx="24.5" cy="25" r="2.5" fill="#CF5128" />
+    <circle cx="19" cy="29" r="2.2" fill="#FE6D2C" />
+    <circle cx="23" cy="29" r="2.2" fill="#FE6D2C" />
+    <circle cx="21" cy="33" r="1.8" fill="#FFFFFF" />
+    <path d="M21 16 L21 19 M18 17 Q21 16 23 18" stroke="#FFFFFF" stroke-width="1.2" stroke-linecap="round"/>
+  </g>
+  <!-- Main Brand Typography -->
+  <g id="brand-text" fill="#FFFFFF">
+    <text x="50" y="24" font-family="'Cinzel', 'Times New Roman', 'Georgia', serif" font-size="16" font-weight="700" letter-spacing="2.8" fill="#FFFFFF">
+      VIÑA CONCHA Y TORO
+    </text>
+    <text x="51" y="38" font-family="'Montserrat', 'Helvetica Neue', Arial, sans-serif" font-size="8.5" font-weight="600" letter-spacing="3.2" fill="#CF5128">
+      CHILE · DESDE 1883
+    </text>
+  </g>
+</svg>

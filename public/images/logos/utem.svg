@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 190 40" fill="none">
+  <!-- UTEM Logo (Universidad Tecnológica Metropolitana) -->
+  <g id="utem-icon">
+    <!-- Isometric Cube / Technological Hexagon -->
+    <path d="M18 4 L31 11.5 L31 26.5 L18 34 L5 26.5 L5 11.5 Z" fill="#0A3254" stroke="#00A896" stroke-width="1.2"/>
+    <path d="M18 4 L18 19 L31 26.5" stroke="#02C39A" stroke-width="1.4"/>
+    <path d="M18 19 L5 26.5" stroke="#00A896" stroke-width="1.4"/>
+    <!-- Central Node Accent -->
+    <circle cx="18" cy="19" r="2.2" fill="#FFFFFF"/>
+  </g>
+  <g id="utem-text">
+    <text x="39" y="19" font-family="'Montserrat', 'Arial Black', Arial, sans-serif" font-size="14" font-weight="900" letter-spacing="1.2" fill="#0A3254">
+      UTEM
+    </text>
+    <text x="39" y="30" font-family="'Arial', sans-serif" font-size="7" font-weight="700" letter-spacing="0.5" fill="#475569">
+      UNIVERSIDAD TECNOLÓGICA
+    </text>
+    <text x="39" y="37" font-family="'Arial', sans-serif" font-size="7" font-weight="700" letter-spacing="0.5" fill="#475569">
+      METROPOLITANA
+    </text>
+  </g>
+</svg>
