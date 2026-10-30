@@ -1,5 +1,7 @@
 'use client';
 
+import { formatearBloqueMezcla } from '@/utils/formatters';
+
 import React, { useEffect, useState } from 'react';
 import { DetalleMaquinariaResponse, CamionMaquinaria, BatchMaquinaria } from '@/types';
 import { fetchDetalleMaquinaria } from '@/api/ganttService';
@@ -105,7 +107,7 @@ export const ModalDetalleMaquinaria: React.FC<ModalDetalleMaquinariaProps> = ({
                   <td className="px-3.5 py-2 font-black text-slate-950">{c.patente}</td>
                   <td className="px-3.5 py-2">
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${grpClass}`}>
-                      {c.grupo_mezcla}
+                      {c.bloque_mezcla || formatearBloqueMezcla(c.grupo_mezcla)}
                     </span>
                   </td>
                   <td className="px-3.5 py-2 text-slate-700">
@@ -221,11 +223,11 @@ export const ModalDetalleMaquinaria: React.FC<ModalDetalleMaquinariaProps> = ({
               {/* Tarjetas de Métricas de Ocupación con Alto Contraste */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="bg-white border border-slate-300 rounded-xl p-3.5 shadow-2xs flex flex-col justify-between">
-                  <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Grupo Varietal</span>
+                  <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Bloque Varietal</span>
                   <div className="mt-1">
                     {equipo.grupo_mezcla ? (
                       <span className={`inline-block text-xs font-extrabold px-2.5 py-0.5 rounded border ${colorClases}`}>
-                        {equipo.grupo_mezcla}
+                        {formatearBloqueMezcla(equipo.grupo_mezcla)}
                       </span>
                     ) : (
                       <span className="text-xs font-mono text-slate-500 font-bold">Limpia / Sin uva</span>
@@ -382,7 +384,7 @@ export const ModalDetalleMaquinaria: React.FC<ModalDetalleMaquinariaProps> = ({
                                 Batch #{b.numero_batch}
                               </span>
                               <span className={`text-xs font-extrabold px-2.5 py-0.5 rounded border ${colorGrp}`}>
-                                {b.grupo_mezcla}
+                                {b.bloque_mezcla || formatearBloqueMezcla(b.grupo_mezcla)}
                               </span>
                               <span
                                 className={`text-[10px] font-mono font-extrabold px-2 py-0.5 rounded border ${
@@ -403,7 +405,7 @@ export const ModalDetalleMaquinaria: React.FC<ModalDetalleMaquinariaProps> = ({
 
                             <div className="flex items-center gap-4 text-xs font-mono">
                               <span className="font-extrabold text-slate-900">
-                                {b.volumen_kg.toLocaleString('es-CL')} kg / 80.000 kg ({b.porcentaje_ocupacion}%)
+                                {(b.volumen_kg / 1000).toFixed(1)} Ton / {(b.capacidad_kg / 1000).toFixed(0)} Ton ({b.porcentaje_ocupacion}%)
                               </span>
                               <span className="text-slate-600 font-medium">
                                 Horario: {formatHora(b.hora_inicio)} a {formatHora(b.hora_fin_estimada)} hrs
@@ -414,12 +416,12 @@ export const ModalDetalleMaquinaria: React.FC<ModalDetalleMaquinariaProps> = ({
                           <div className="mb-2 text-xs text-slate-600 font-sans">
                             {esFin && (
                               <p className="bg-slate-100/70 text-slate-700 p-2 rounded-lg border border-slate-200">
-                                Este lote de uva {b.grupo_mezcla} completó su ciclo de prensado neumático. La membrana fue desinflada, el orujo evacuado y la prensa quedó disponible y lavada.
+                                Este lote de uva {b.bloque_mezcla || formatearBloqueMezcla(b.grupo_mezcla)} completó su ciclo de prensado neumático. La membrana fue desinflada, el orujo evacuado y la prensa quedó disponible y lavada.
                               </p>
                             )}
                             {esActivo && (
                               <p className="bg-emerald-100/60 text-emerald-900 p-2 rounded-lg border border-emerald-200 font-medium">
-                                Lote físico actualmente en prensa. La uva recibida corresponde estrictamente a la variedad {b.grupo_mezcla}.
+                                Lote físico actualmente en prensa. La uva recibida corresponde estrictamente a la variedad {b.bloque_mezcla || formatearBloqueMezcla(b.grupo_mezcla)}.
                               </p>
                             )}
                             {!esFin && !esActivo && (

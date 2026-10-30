@@ -2,7 +2,7 @@ import React, { useMemo, useRef, useEffect, useState } from 'react';
 import { Pozo, BloqueGantt, PrensaGantt } from '@/types';
 import { getGroupColor, getGroupBgColor } from '@/utils/colors';
 import { fijarAsignacion, toggleOperatividadPozo } from '@/api/ganttService';
-import { formatearNombreEquipo } from '@/utils/formatters';
+import { formatearNombreEquipo, formatearBloqueMezcla } from '@/utils/formatters';
 import { ModalDetalleMaquinaria } from './ModalDetalleMaquinaria';
 import toast from 'react-hot-toast';
 
@@ -70,6 +70,27 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({
     }
     return list;
   }, [prensas]);
+
+  // Lista dinámica de bloques de vendimia presentes en la jornada operativa actual
+  const bloquesActivosLeyenda = useMemo(() => {
+    const set = new Set<string>();
+    pozos.forEach(p => p.asignaciones.forEach(a => {
+      if (a.grupo) set.add(a.grupo);
+    }));
+    prensasList.forEach(pr => pr.batches?.forEach(b => {
+      if (b.grupo_mezcla) set.add(b.grupo_mezcla);
+    }));
+    if (set.size === 0) {
+      return Array.from({ length: 6 }, (_, i) => `GRUPO-${i + 1}`);
+    }
+    return Array.from(set).sort((a, b) => {
+      if (a.toUpperCase() === 'GENERICO') return 1;
+      if (b.toUpperCase() === 'GENERICO') return -1;
+      const numA = parseInt(a.replace(/\D/g, '') || '999', 10);
+      const numB = parseInt(b.replace(/\D/g, '') || '999', 10);
+      return numA - numB;
+    });
+  }, [pozos, prensasList]);
 
   // Monitoreo de ancho disponible para modo FIT_24H mediante ResizeObserver de precisión
   useEffect(() => {
@@ -333,18 +354,39 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({
           </div>
         </div>
 
-        {/* Leyenda Dinámica de Grupos Enológicos */}
-        <div className="flex flex-wrap gap-2 text-[10px] font-bold text-slate-500 max-w-xl justify-end items-center">
-          {Array.from({ length: 11 }, (_, i) => i + 1).map((num) => (
-            <div key={`legend-g-${num}`} className="flex items-center gap-1">
-              <div className={`w-2.5 h-2.5 rounded-xs ${getGroupBgColor(`GRUPO-${num}`)}`}></div>
-              <span>G-{num}</span>
-            </div>
-          ))}
-          <div className="flex items-center gap-1 ml-1">
-            <div className={`w-2.5 h-2.5 rounded-xs ${getGroupBgColor('GENERICO')}`}></div>
-            <span>GEN</span>
+        {/* Leyenda Dinámica de Bloques de Vendimia y Sub-estados de Prensas */}
+        <div className="flex flex-col gap-1 items-end max-w-2xl">
+          <div className="flex flex-wrap gap-2 text-[10px] font-bold text-slate-500 justify-end items-center">
+            {bloquesActivosLeyenda.map((grp) => (
+              <div key={`legend-${grp}`} className="flex items-center gap-1">
+                <div className={`w-2.5 h-2.5 rounded-xs ${getGroupBgColor(grp)}`}></div>
+                <span>{formatearBloqueMezcla(grp)}</span>
+              </div>
+            ))}
           </div>
+          {ganttViewMode === 'PRENSAS' && (
+            <div className="flex flex-wrap gap-2 text-[9px] font-extrabold text-slate-600 justify-end items-center mt-0.5">
+              <div className="flex items-center gap-1 bg-cyan-50 px-2 py-0.5 rounded border border-cyan-300">
+                <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
+                <span className="text-cyan-800">Llenándose</span>
+              </div>
+              <div className="flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded border border-amber-300">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+                <span className="text-amber-800">En Espera (Alargándose)</span>
+              </div>
+              <div className="flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-300">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span className="text-emerald-800">Prensando</span>
+              </div>
+              <div className="flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded border border-slate-300">
+                <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                <span className="text-slate-600">Finalizado</span>
+              </div>
+              <div className="flex items-center gap-1 bg-blue-50/50 px-2 py-0.5 rounded border border-blue-200 border-dashed">
+                <span className="text-blue-700">Proyectado</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -406,8 +448,7 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({
               </div>
             ))
           ) : (
-            prensasList.map((pr, idx) => {
-              const esAlaIzquierda = pr.ala === 'ALA_IZQUIERDA' || idx < 6;
+            prensasList.map((pr) => {
               return (
                 <div 
                   key={pr.id || pr.nombre} 
@@ -419,20 +460,21 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({
                     <div className="font-extrabold text-xs text-slate-900 group-hover:text-blue-600 transition-colors">
                       {pr.nombre_humano || formatearNombreEquipo(pr.nombre)}
                     </div>
-                    <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border ${
-                      esAlaIzquierda 
-                        ? 'bg-blue-50 text-blue-900 border-blue-200' 
-                        : 'bg-indigo-50 text-indigo-900 border-indigo-200'
-                    }`}>
-                      {esAlaIzquierda ? 'Ala Izq' : 'Ala Der'}
+                    <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border bg-slate-100 text-slate-700 border-slate-200">
+                      {(pr.capacidad_kg / 1000).toFixed(0)} Ton
                     </span>
                   </div>
-                  <div className="flex items-center justify-between text-xs text-stone-500 font-semibold mt-0.5">
-                    <span>80 Ton / 2.5h</span>
-                    <span className="font-mono text-[10px] text-slate-400">
-                      {pr.batches && pr.batches.length > 0 
-                        ? `${pr.batches.length} ${pr.batches.length === 1 ? 'batch' : 'batches'}` 
-                        : 'Disponible'}
+                  <div className="flex items-center justify-between text-xs mt-0.5">
+                    <span className={`text-[10px] font-bold capitalize ${
+                      pr.estado_instantaneo === 'llenandose' ? 'text-cyan-600 font-extrabold animate-pulse' :
+                      pr.estado_instantaneo === 'cargada en espera' ? 'text-amber-600 font-extrabold' :
+                      pr.estado_instantaneo === 'prensando' ? 'text-emerald-700 font-extrabold' :
+                      'text-slate-400 font-medium'
+                    }`}>
+                      {pr.estado_instantaneo || 'Vacía'}
+                    </span>
+                    <span className="font-mono text-[10px] text-slate-400 font-semibold">
+                      {pr.proc_horas || 6}h ciclo
                     </span>
                   </div>
                 </div>
@@ -561,7 +603,7 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({
                            </div>
                            {zoomMode !== 'FIT_24H' && (
                              <div className="text-[10px] font-medium opacity-90 whitespace-nowrap text-ellipsis overflow-hidden w-full">
-                               {asig.grupo}
+                               {asig.bloque || formatearBloqueMezcla(asig.grupo)}
                              </div>
                            )}
                          </div>
@@ -574,7 +616,10 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({
                               ) : asig.estado === 'DESCARGANDO' ? (
                                   <span className="bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider">OPERACIÓN ACTIVA</span>
                               ) : asig.estado === 'TRANSITO' ? (
-                                  <span className="bg-slate-700/50 text-slate-300 border border-slate-600 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider">PLAN TENTATIVO (GPS)</span>
+                                  <div className="flex flex-col items-center gap-1">
+                                    <span className="bg-slate-700/50 text-slate-300 border border-slate-600 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider">PLAN TENTATIVO (GPS)</span>
+                                    <span className="text-[9px] text-amber-300/90 font-normal">Sujeto a confirmación en Romana</span>
+                                  </div>
                               ) : asig.override_manual ? (
                                   <span className="bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider">ASIGNACIÓN FIJA</span>
                               ) : (
@@ -586,7 +631,7 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({
                               {asig.patente} <span className="text-[10px] ml-2 text-slate-400 bg-slate-800 px-2 py-0.5 rounded">{asig.estado}</span>
                             </div>
                             <div className="space-y-1.5">
-                              <div className="flex justify-between"><span className="text-slate-400">Grupo:</span> <span className="font-bold">{asig.grupo}</span></div>
+                              <div className="flex justify-between"><span className="text-slate-400">Bloque:</span> <span className="font-bold">{asig.bloque || formatearBloqueMezcla(asig.grupo)}</span></div>
                               <div className="flex justify-between"><span className="text-slate-400">Peso:</span> <span className="font-bold">{(asig.peso_kg / 1000).toFixed(1)} Ton</span></div>
                               <div className="flex justify-between"><span className="text-slate-400">Espera:</span> <span className={`font-bold ${asig.espera_hrs > 1.5 ? 'text-red-400' : 'text-emerald-400'}`}>{asig.espera_hrs.toFixed(1)} hrs</span></div>
                             </div>
@@ -626,107 +671,146 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({
                   style={{ height: '64px', minHeight: '64px', maxHeight: '64px' }}
                 >
                   {pr.batches && pr.batches.map((batch) => {
-                    const style = getBlockStyle(batch.hora_inicio, batch.hora_fin_estimada);
-                    const colorClass = getGroupColor(batch.grupo_mezcla);
+                    const tooltipPos = rowIndex <= 3 ? 'top-full mt-2' : 'bottom-full mb-2';
 
-                    if (parseFloat(style.left) > 100 || parseFloat(style.left) + parseFloat(style.width) < 0) return null;
+                    // Si el backend entrega el desglose de telemetría física (bloques_llenado, espera y prensado):
+                    if (batch.bloques_llenado && batch.bloques_llenado.length > 0) {
+                      return (
+                        <React.Fragment key={`${pr.nombre}-batch-${batch.numero_batch}-${batch.hora_inicio}`}>
+                          {/* A. BLOQUES INDIVIDUALES DE LLENADO POR CAMIÓN */}
+                          {batch.bloques_llenado.map((ll, llIdx) => {
+                            const llStyle = getBlockStyle(ll.hora_inicio, ll.hora_fin);
+                            if (parseFloat(llStyle.left) > 100 || parseFloat(llStyle.left) + parseFloat(llStyle.width) < 0) return null;
+                            const colorClass = getGroupColor(ll.bloque_mezcla);
+                            const isLlenando = ll.estado === 'Llenando';
 
-                    const endT = new Date(batch.hora_fin_estimada).getTime();
-                    const startT = new Date(batch.hora_inicio).getTime();
-                    const isPast = virtualTime && endT <= virtualTime;
-                    const isCurrent = virtualTime && startT <= virtualTime && virtualTime < endT;
+                            return (
+                              <div
+                                key={`ll-${ll.viaje_id}-${ll.hora_inicio}-${llIdx}`}
+                                style={llStyle}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (ll.viaje_id && onSelectViaje) onSelectViaje(ll.viaje_id);
+                                  else setSelectedEquipoModal(pr.nombre);
+                                }}
+                                className={`absolute top-1.5 bottom-1.5 rounded-lg ${colorClass} ${
+                                  isLlenando
+                                    ? 'border-2 border-cyan-300 ring-2 ring-cyan-400/80 shadow-md bg-[repeating-linear-gradient(45deg,rgba(255,255,255,0.2),rgba(255,255,255,0.2)_8px,transparent_8px,transparent_16px)] animate-[pulse_2.5s_ease-in-out_infinite]'
+                                    : 'border border-white/50 shadow-xs'
+                                } flex flex-col justify-center items-center px-1.5 py-0.5 cursor-pointer z-20 hover:z-[65] transition-all hover:-translate-y-0.5 overflow-hidden`}
+                                title={`Camión ${ll.patente} (${ll.volumen_t}t) - ${ll.estado} en ${pr.nombre_humano || pr.nombre}`}
+                              >
+                                <div className="font-mono font-black text-white text-[11px] leading-tight whitespace-nowrap text-ellipsis overflow-hidden">
+                                  {ll.patente}
+                                </div>
+                                <div className="text-[9px] font-bold text-white/95 leading-tight whitespace-nowrap text-ellipsis overflow-hidden">
+                                  {ll.bloque_mezcla} - {ll.estado}
+                                </div>
+                                <div className="text-[8.5px] font-mono text-white/90 leading-none whitespace-nowrap text-ellipsis overflow-hidden">
+                                  {ll.volumen_t} t
+                                </div>
+                              </div>
+                            );
+                          })}
 
-                    let visualClass = 'opacity-100 border border-white/30 hover:-translate-y-0.5 hover:shadow-lg';
-                    if (batch.estado_batch === 'EN_CURSO' || isCurrent) {
-                      visualClass = 'opacity-100 border-2 border-white ring-2 ring-blue-500 shadow-md animate-pulse';
-                    } else if (batch.estado_batch === 'FINALIZADO' || isPast) {
-                      visualClass = atenuarPasado ? 'opacity-40 grayscale hover:grayscale-0 hover:opacity-100' : 'opacity-95 border border-white/20 shadow-xs';
-                    } else {
-                      visualClass = 'opacity-85 border border-dashed border-white/60 bg-[linear-gradient(45deg,rgba(255,255,255,0.1)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.1)_50%,rgba(255,255,255,0.1)_75%,transparent_75%,transparent)] bg-[length:8px_8px]';
+                          {/* B. BLOQUE DE ESPERA (GRIS / AMBAR / ALERTA DE OXIDACION 120 MIN) */}
+                          {batch.bloque_espera && (() => {
+                            const espStyle = getBlockStyle(batch.bloque_espera.hora_inicio, batch.bloque_espera.hora_fin);
+                            if (parseFloat(espStyle.left) > 100 || parseFloat(espStyle.left) + parseFloat(espStyle.width) < 0) return null;
+
+                            const tEsp = batch.bloque_espera.tiempo_espera_minutos;
+                            const isCritico = tEsp >= 90;
+                            const isAlerta = tEsp >= 60 && tEsp < 90;
+
+                            const colorCls = isCritico
+                              ? 'bg-orange-200/95 text-orange-950 border-orange-400 shadow-xs animate-[pulse_2s_ease-in-out_infinite]'
+                              : isAlerta
+                              ? 'bg-amber-100/95 text-amber-900 border-amber-300 shadow-2xs'
+                              : 'bg-stone-300/95 hover:bg-stone-300 text-stone-800 border-stone-400/90 shadow-2xs';
+
+                            return (
+                              <div
+                                key={`esp-${batch.numero_batch}-${batch.bloque_espera.hora_inicio}`}
+                                style={espStyle}
+                                onClick={() => setSelectedEquipoModal(pr.nombre)}
+                                className={`absolute top-2.5 bottom-2.5 rounded-md ${colorCls} border flex items-center justify-center px-1.5 cursor-pointer z-15 hover:z-[65] transition-all overflow-hidden`}
+                                title={`Prensa en Espera de Fruta: ${tEsp} min transcurridos de 120 min max. ${isCritico ? 'Riesgo critico de cierre por oxidacion' : ''}`}
+                              >
+                                <span className="text-[9.5px] font-black tracking-tight whitespace-nowrap leading-none">
+                                  {parseFloat(espStyle.width) > 3.5 ? `Espera: ${tEsp}/120m` : `${tEsp}m`}
+                                </span>
+                              </div>
+                            );
+                          })()}
+
+                          {/* C. BLOQUE DE PRENSADO (TENTATIVO O FIRME) */}
+                          {batch.bloque_prensado && (() => {
+                            const prStyle = getBlockStyle(batch.bloque_prensado.hora_inicio, batch.bloque_prensado.hora_fin);
+                            if (parseFloat(prStyle.left) > 100 || parseFloat(prStyle.left) + parseFloat(prStyle.width) < 0) return null;
+
+                            const isTentativo = batch.bloque_prensado.es_tentativo;
+                            const grpColor = getGroupColor(batch.bloque_prensado.bloque_mezcla);
+
+                            if (isTentativo) {
+                              return (
+                                <div
+                                  key={`pr-tent-${batch.numero_batch}-${batch.bloque_prensado.hora_inicio}`}
+                                  style={prStyle}
+                                  onClick={() => setSelectedEquipoModal(pr.nombre)}
+                                  className={`absolute top-1.5 bottom-1.5 rounded-lg ${grpColor} opacity-80 border-2 border-dashed border-white/80 flex flex-col justify-center items-start px-2.5 py-1 cursor-pointer z-10 hover:z-[65] transition-all hover:opacity-100 shadow-2xs overflow-hidden`}
+                                  title={`Prensado Tentativo (${batch.bloque_prensado.proc_horas}h programadas) - Puede cambiar`}
+                                >
+                                  <div className="font-bold text-[10.5px] text-white leading-tight whitespace-nowrap text-ellipsis overflow-hidden w-full drop-shadow-xs">
+                                    {batch.bloque_prensado.texto_badge}
+                                  </div>
+                                  <div className="text-[9.5px] font-medium text-white/90 leading-tight whitespace-nowrap text-ellipsis overflow-hidden w-full">
+                                    {batch.bloque_prensado.bloque_mezcla} · {batch.bloque_prensado.volumen_t} t
+                                  </div>
+                                  <div className="text-[8.5px] font-semibold text-white/80 leading-none whitespace-nowrap mt-0.5">
+                                    Puede cambiar
+                                  </div>
+                                </div>
+                              );
+                            } else {
+                              return (
+                                <div
+                                  key={`pr-firme-${batch.numero_batch}-${batch.bloque_prensado.hora_inicio}`}
+                                  style={prStyle}
+                                  onClick={() => setSelectedEquipoModal(pr.nombre)}
+                                  className={`absolute top-1.5 bottom-1.5 rounded-lg ${grpColor} border-2 shadow-md flex flex-col justify-center items-start px-3 py-1 cursor-pointer z-25 hover:z-[65] transition-all hover:-translate-y-0.5 overflow-hidden`}
+                                  title={`Prensado Mecánico en Curso (${batch.bloque_prensado.proc_horas}h de ciclo)`}
+                                >
+                                  <div className="font-extrabold text-[11px] text-white leading-tight whitespace-nowrap text-ellipsis overflow-hidden w-full drop-shadow-xs">
+                                    {batch.bloque_prensado.texto_badge}
+                                  </div>
+                                  <div className="text-[9.5px] font-mono font-bold text-white/90 leading-tight whitespace-nowrap">
+                                    {batch.bloque_prensado.volumen_t} t ({batch.porcentaje_ocupacion.toFixed(0)}%)
+                                  </div>
+                                </div>
+                              );
+                            }
+                          })()}
+                        </React.Fragment>
+                      );
                     }
 
-                    const tooltipPos = rowIndex <= 3 ? 'top-full mt-2' : 'bottom-full mb-2';
+                    // Fallback para batches sin desglose específico
+                    const style = getBlockStyle(batch.hora_inicio, batch.hora_fin_estimada);
+                    const colorClass = getGroupColor(batch.grupo_mezcla);
+                    if (parseFloat(style.left) > 100 || parseFloat(style.left) + parseFloat(style.width) < 0) return null;
 
                     return (
                       <div
                         key={`${pr.nombre}-batch-${batch.numero_batch}-${batch.hora_inicio}`}
                         style={style}
                         onClick={() => setSelectedEquipoModal(pr.nombre)}
-                        className={`absolute top-1.5 bottom-1.5 rounded-lg ${colorClass} ${visualClass} group flex flex-col justify-center cursor-pointer transition-all z-10 hover:z-[65] px-2 shadow-sm`}
+                        className={`absolute top-1.5 bottom-1.5 rounded-lg ${colorClass} opacity-95 border border-white/30 flex flex-col justify-center items-center px-2 cursor-pointer transition-all z-10 hover:z-[65] shadow-xs overflow-hidden`}
                       >
-                        {/* Batch label and tonnage */}
-                        <div className="flex flex-col overflow-hidden w-full items-center text-center leading-tight">
-                          <div className="font-extrabold tracking-tight whitespace-nowrap text-ellipsis overflow-hidden w-full text-xs text-white drop-shadow-xs">
-                            Batch #{batch.numero_batch} · {batch.grupo_mezcla}
-                          </div>
-                          <div className="text-[10px] font-mono font-bold opacity-95 text-white whitespace-nowrap text-ellipsis overflow-hidden w-full">
-                            {(batch.volumen_kg / 1000).toFixed(1)} Ton ({batch.porcentaje_ocupacion.toFixed(0)}%)
-                          </div>
-                          {zoomMode !== 'FIT_24H' && (
-                            <div className="text-[9px] font-medium opacity-90 text-white whitespace-nowrap">
-                              {batch.camiones.length} {batch.camiones.length === 1 ? 'camión' : 'camiones'}
-                            </div>
-                          )}
+                        <div className="font-extrabold text-xs text-white whitespace-nowrap text-ellipsis overflow-hidden">
+                          Batch #{batch.numero_batch} · {batch.bloque_mezcla || batch.grupo_mezcla}
                         </div>
-
-                        {/* Tooltip de Detalle Batch */}
-                        <div className={`absolute left-1/2 -translate-x-1/2 ${tooltipPos} hidden group-hover:block w-64 bg-slate-900 text-white text-xs rounded-xl p-4 shadow-2xl z-[75] pointer-events-none`}>
-                          <div className="flex justify-between items-center mb-2 pb-2 border-b border-slate-700">
-                            <span className="font-extrabold text-sm text-white">
-                              {pr.nombre_humano || formatearNombreEquipo(pr.nombre)}
-                            </span>
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              batch.estado_batch === 'EN_CURSO'
-                                ? 'bg-blue-500/30 text-blue-300 border border-blue-400'
-                                : batch.estado_batch === 'FINALIZADO'
-                                ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-400'
-                                : 'bg-slate-700 text-slate-300 border border-slate-600'
-                            }`}>
-                              Batch #{batch.numero_batch} ({batch.estado_batch})
-                            </span>
-                          </div>
-
-                          <div className="space-y-1.5 font-mono text-[11px] text-slate-300">
-                            <div className="flex justify-between">
-                              <span className="text-slate-400">Variedad/Grupo:</span>
-                              <strong className="text-white">{batch.grupo_mezcla}</strong>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-400">Carga Total:</span>
-                              <strong className="text-white">{batch.volumen_kg.toLocaleString('es-CL')} kg / 80k kg</strong>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-400">Ocupación:</span>
-                              <strong className="text-white">{batch.porcentaje_ocupacion.toFixed(1)} %</strong>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-400">Ciclo Prensado:</span>
-                              <span className="text-cyan-300">
-                                {new Date(batch.hora_inicio).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})} - {new Date(batch.hora_fin_estimada).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-400">Aporte Camiones:</span>
-                              <span className="text-white">{batch.camiones.length} viajes</span>
-                            </div>
-                          </div>
-
-                          <div className="mt-3 pt-2 border-t border-slate-700 flex flex-wrap gap-1">
-                            {batch.camiones.slice(0, 4).map((c, ci) => (
-                              <span key={ci} className="text-[9px] font-mono bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded border border-slate-700">
-                                {c.patente} ({(c.volumen_etapa / 1000).toFixed(1)}t)
-                              </span>
-                            ))}
-                            {batch.camiones.length > 4 && (
-                              <span className="text-[9px] font-mono text-slate-400 self-center">
-                                +{batch.camiones.length - 4} más
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="mt-2 text-[10px] text-blue-300 font-semibold text-center">
-                            Clic para abrir ficha técnica completa
-                          </div>
+                        <div className="text-[10px] font-mono text-white/90">
+                          {(batch.volumen_kg / 1000).toFixed(1)} Ton
                         </div>
                       </div>
                     );
@@ -800,7 +884,7 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
                       Camión <span className="font-bold text-slate-800">{selectedAsig.asig.patente}</span> | 
-                      Grupo <span className="font-bold text-slate-700">{selectedAsig.asig.grupo}</span> | 
+                      Bloque <span className="font-bold text-slate-700">{selectedAsig.asig.bloque || formatearBloqueMezcla(selectedAsig.asig.grupo)}</span> | 
                       Estado <span className={`font-bold ${isDescargando ? 'text-amber-600' : 'text-blue-600'}`}>{selectedAsig.asig.estado}</span>
                     </p>
                   </div>
@@ -1008,7 +1092,7 @@ export const TableroGantt: React.FC<TableroGanttProps> = ({
                   </div>
                   
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 my-3 text-xs space-y-1.5 text-slate-700">
-                    <div>Camión: <strong className="text-slate-900">{selectedAsig.asig.patente}</strong> ({selectedAsig.asig.grupo})</div>
+                    <div>Camión: <strong className="text-slate-900">{selectedAsig.asig.patente}</strong> ({selectedAsig.asig.bloque || formatearBloqueMezcla(selectedAsig.asig.grupo)})</div>
                     <div>Cambio de tolva: <strong className="text-emerald-700">{formatearNombreEquipo(selectedAsig.pozoOriginal.nombre)}</strong> &rarr; <strong className="text-amber-800">{formatearNombreEquipo(selectedAsig.pozo.nombre)}</strong></div>
                   </div>
 

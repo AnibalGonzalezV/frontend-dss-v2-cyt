@@ -2,9 +2,15 @@ export interface CamionPatio {
   viaje_id: number;
   patente: string;
   grupo: string;
+  bloque?: string;
   peso_kg: number;
   hora_llegada: string | null;
   estado: string;
+  programado?: {
+    pozo: string;
+    hora_inicio: string;
+    hora_fin: string;
+  } | null;
 }
 
 export interface BloqueGantt {
@@ -12,6 +18,7 @@ export interface BloqueGantt {
   viaje_id: number;
   patente: string;
   grupo: string;
+  bloque?: string;
   peso_kg: number;
   hora_inicio: string;
   hora_fin: string;
@@ -45,6 +52,8 @@ export interface PrensaGantt {
   ala: 'ALA_IZQUIERDA' | 'ALA_DERECHA' | string;
   operativa: boolean;
   capacidad_kg: number;
+  proc_horas?: number;
+  estado_instantaneo?: string;
   batches: BatchMaquinaria[];
 }
 
@@ -154,6 +163,7 @@ export interface CamionMaquinaria {
   patente: string;
   variedad: string;
   grupo_mezcla: string;
+  bloque_mezcla?: string;
   estado_viaje: string;
   es_real: boolean;
   volumen_etapa: number;
@@ -165,16 +175,59 @@ export interface CamionMaquinaria {
   destino_humano?: string;
 }
 
+export interface BloqueLlenadoPrensa {
+  viaje_id: number;
+  patente: string;
+  bloque_mezcla: string;
+  volumen_kg: number;
+  volumen_t: number;
+  hora_inicio: string;
+  hora_fin: string;
+  estado: string; // 'Llenando' | 'Llenado' | 'Programado'
+  es_real: boolean;
+}
+
+export interface BloqueEsperaPrensa {
+  hora_inicio: string;
+  hora_fin: string;
+  tiempo_espera_minutos: number;
+  max_espera_minutos: number;
+  esta_activo: boolean;
+}
+
+export interface BloquePrensadoPrensa {
+  tipo: 'FIRME' | 'TENTATIVO';
+  es_tentativo: boolean;
+  hora_inicio: string;
+  hora_fin: string;
+  proc_horas: number;
+  volumen_kg: number;
+  volumen_t: number;
+  patentes_str: string;
+  bloque_mezcla: string;
+  texto_badge: string;
+  nota?: string;
+}
+
 export interface BatchMaquinaria {
   numero_batch: number;
   estado_batch: 'EN_CURSO' | 'FINALIZADO' | 'PROYECTADO';
+  sub_estado_prensa?: 'LLENANDOSE' | 'CARGADA_EN_ESPERA' | 'PRENSANDO' | 'FINALIZADO' | 'PROYECTADO';
+  tiempo_espera_minutos?: number;
+  max_espera_minutos?: number;
+  proc_horas?: number;
   grupo_mezcla: string;
+  bloque_mezcla?: string;
   volumen_kg: number;
   capacidad_kg: number;
   porcentaje_ocupacion: number;
   hora_inicio: string;
+  hora_inicio_prensado?: string;
   hora_fin_estimada: string;
   camiones: CamionMaquinaria[];
+  bloques_llenado?: BloqueLlenadoPrensa[];
+  bloque_espera?: BloqueEsperaPrensa | null;
+  bloque_prensado?: BloquePrensadoPrensa | null;
 }
 
 export interface FasesMaquinaria {

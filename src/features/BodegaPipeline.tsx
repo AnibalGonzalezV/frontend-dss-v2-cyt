@@ -1,5 +1,7 @@
 'use client';
 
+import { formatearBloqueMezcla } from '@/utils/formatters';
+
 import React, { useEffect, useState, useMemo } from 'react';
 import { InventarioBodegaResponse, CubaInventario } from '@/types';
 import { fetchInventarioBodega } from '@/api/ganttService';
@@ -277,7 +279,7 @@ export const BodegaPipeline: React.FC<BodegaPipelineProps> = ({ virtualTime, onS
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${colorClases}`}>
-                          {grupo}
+                          {formatearBloqueMezcla(grupo)}
                         </span>
                         <span className="text-xs font-black text-amber-950 font-mono">
                           {pctReal.toFixed(1)}% {pctProy > 0 ? `(+${pctProy.toFixed(1)}%p)` : ''}
@@ -306,7 +308,7 @@ export const BodegaPipeline: React.FC<BodegaPipelineProps> = ({ virtualTime, onS
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded border border-dashed ${colorClases}`}>
-                          {grupo}
+                          {formatearBloqueMezcla(grupo)}
                         </span>
                         <span className="text-[10px] font-bold text-amber-900 font-mono uppercase bg-amber-100 px-1.5 py-0.5 rounded">
                           Reservada
@@ -516,7 +518,7 @@ export const BodegaPipeline: React.FC<BodegaPipelineProps> = ({ virtualTime, onS
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${colorClases}`}>
-                          {cf.grupo_mezcla}
+                          {formatearBloqueMezcla(cf.grupo_mezcla)}
                         </span>
                         <span className="text-xs font-black text-emerald-950 font-mono">
                           {pctReal.toFixed(1)}% {pctProy > 0 ? `(+${pctProy.toFixed(1)}%p)` : ''}
@@ -545,7 +547,7 @@ export const BodegaPipeline: React.FC<BodegaPipelineProps> = ({ virtualTime, onS
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded border border-dashed ${colorClases}`}>
-                          {cf.grupo_mezcla}
+                          {formatearBloqueMezcla(cf.grupo_mezcla)}
                         </span>
                         <span className="text-[10px] font-bold text-emerald-900 font-mono uppercase bg-emerald-100 px-1.5 py-0.5 rounded">
                           Reservada

@@ -1,3 +1,17 @@
+export function formatearBloqueMezcla(grupo?: string | null): string {
+  if (!grupo) return '';
+  const trimmed = grupo.trim();
+  const match = trimmed.match(/(?:GRUPO|BLOQUE)[_-\s]?(\d+)/i);
+  if (match) {
+    const num = parseInt(match[1], 10);
+    return `Bloque ${num.toString().padStart(2, '0')}`;
+  }
+  if (trimmed.toUpperCase() === 'GENERICO') {
+    return 'Bloque Genérico';
+  }
+  return trimmed.replace(/GRUPO[_-]?/gi, 'Bloque ').replace(/Grupo[_-]?/gi, 'Bloque ');
+}
+
 /**
  * Utilidades de formateo para nombres de maquinaria e indicadores operacionales en Bodega Lontué.
  */

@@ -1,3 +1,4 @@
+import { formatearBloqueMezcla } from '@/utils/formatters';
 import React, { useState } from 'react';
 import { CamionPatio } from '@/types';
 import { getGroupColor } from '@/utils/colors';
@@ -97,7 +98,7 @@ export const ColaPatio: React.FC<ColaPatioProps> = ({ camiones, onSelectViaje })
                     </div>
 
                     <div className="flex items-center justify-between text-xs font-bold mt-0.5">
-                      <span>{camion.grupo}</span>
+                      <span>{camion.bloque || formatearBloqueMezcla(camion.grupo)}</span>
                       <span className="text-[10px] font-mono opacity-90">
                         {(camion.peso_kg / 1000).toFixed(1)} Ton
                       </span>
@@ -110,6 +111,19 @@ export const ColaPatio: React.FC<ColaPatioProps> = ({ camiones, onSelectViaje })
                           ? new Date(camion.hora_llegada).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                           : '--:--'}
                       </span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-[10px] mt-1 pt-1 border-t border-white/20 font-mono">
+                      <span className="uppercase font-sans font-semibold">Tolva / Turno:</span>
+                      {camion.programado ? (
+                        <span className="font-black bg-black/30 px-1.5 py-0.5 rounded text-white tracking-wide">
+                          {camion.programado.pozo} · {new Date(camion.programado.hora_inicio).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      ) : (
+                        <span className="font-black bg-amber-500/80 text-white px-1.5 py-0.5 rounded tracking-wide animate-pulse">
+                          En espera (Prensas copadas)
+                        </span>
+                      )}
                     </div>
                   </div>
                 );
@@ -185,7 +199,7 @@ export const ColaPatio: React.FC<ColaPatioProps> = ({ camiones, onSelectViaje })
                     </div>
 
                     <div className="flex items-center justify-between text-xs font-bold mt-0.5">
-                      <span>{camion.grupo}</span>
+                      <span>{camion.bloque || formatearBloqueMezcla(camion.grupo)}</span>
                       <span className="text-[10px] font-mono opacity-90">
                         {(camion.peso_kg / 1000).toFixed(1)} Ton
                       </span>
@@ -199,6 +213,15 @@ export const ColaPatio: React.FC<ColaPatioProps> = ({ camiones, onSelectViaje })
                           : '--:--'}
                       </span>
                     </div>
+
+                    {camion.programado && (
+                      <div className="flex justify-between items-center text-[10px] mt-1 pt-1 border-t border-white/20 font-mono">
+                        <span className="uppercase font-sans font-semibold">Tolva Asignada:</span>
+                        <span className="font-bold bg-black/30 px-1.5 py-0.5 rounded text-white tracking-wide">
+                          {camion.programado.pozo} · {new Date(camion.programado.hora_inicio).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 );
               })}

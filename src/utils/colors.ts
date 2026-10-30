@@ -51,8 +51,8 @@ export const getGroupColor = (grupo: string | undefined | null): string => {
     return EXPLICIT_GROUP_MAP[grupo];
   }
 
-  // Extraer número de formato GRUPO-X o GRUPO_X
-  const match = grupo.match(/GRUPO[_-]?(\d+)/i);
+  // Extraer número de formato GRUPO-X, GRUPO_X, Bloque X o Bloque-X
+  const match = grupo.match(/(?:GRUPO|BLOQUE)[_-\s]?(\d+)/i);
   if (match) {
     const num = parseInt(match[1], 10);
     const index = Math.max(0, (num - 1)) % PRIMARY_PALETTE.length;
